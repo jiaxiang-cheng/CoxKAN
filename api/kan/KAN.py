@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from .KANLayer import *
-from .Symbolic_KANLayer import *
+from .SymbolicKANLayer import *
 from .LBFGS import *
 import os
 import glob
@@ -169,7 +169,7 @@ class KAN(nn.Module):
         ### initializing the symbolic front ###
         self.symbolic_fun = []
         for l in range(self.depth):
-            sb_batch = Symbolic_KANLayer(in_dim=width[l], out_dim=width[l + 1], device=device)
+            sb_batch = SymbolicKANLayer(in_dim=width[l], out_dim=width[l + 1], device=device)
             self.symbolic_fun.append(sb_batch)
 
         self.symbolic_fun = nn.ModuleList(self.symbolic_fun)

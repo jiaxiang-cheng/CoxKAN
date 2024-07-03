@@ -4,6 +4,7 @@ from torch.optim import Optimizer
 
 __all__ = ['LBFGS']
 
+
 def _cubic_interpolate(x1, f1, g1, x2, f2, g2, bounds=None):
     # ported from https://github.com/torch/optim/blob/master/polyinterp.lua
     # Compute bounds of interpolation area
@@ -19,8 +20,9 @@ def _cubic_interpolate(x1, f1, g1, x2, f2, g2, bounds=None):
     #   d2 = sqrt(d1^2 - g1*g2);
     #   min_pos = x2 - (x2 - x1)*((g2 + d2 - d1)/(g2 - g1 + 2*d2));
     #   t_new = min(max(min_pos,xmin_bound),xmax_bound);
+
     d1 = g1 + g2 - 3 * (f1 - f2) / (x1 - x2)
-    d2_square = d1**2 - g1 * g2
+    d2_square = d1 ** 2 - g1 * g2
     if d2_square >= 0:
         d2 = d2_square.sqrt()
         if x1 <= x2:
@@ -181,9 +183,9 @@ def _strong_wolfe(obj_func,
     return f_new, g_new, t, ls_func_evals
 
 
-
 class LBFGS(Optimizer):
-    """Implements L-BFGS algorithm.
+    """
+    Implements L-BFGS algorithm.
 
     Heavily inspired by `minFunc
     <https://www.cs.ubc.ca/~schmidtm/Software/minFunc.html>`_.
@@ -285,7 +287,6 @@ class LBFGS(Optimizer):
         self._set_param(x)
         return loss, flat_grad
 
-
     @torch.no_grad()
     def step(self, closure):
         """Perform a single optimization step.
@@ -345,9 +346,7 @@ class LBFGS(Optimizer):
             n_iter += 1
             state['n_iter'] += 1
 
-            ############################################################
             # compute gradient descent direction
-            ############################################################
             if state['n_iter'] == 1:
                 d = flat_grad.neg()
                 old_dirs = []
@@ -402,9 +401,7 @@ class LBFGS(Optimizer):
                 prev_flat_grad.copy_(flat_grad)
             prev_loss = loss
 
-            ############################################################
             # compute step length
-            ############################################################
             # reset initial guess for step size
             if state['n_iter'] == 1:
                 t = min(1., 1. / flat_grad.abs().sum()) * lr
@@ -451,9 +448,7 @@ class LBFGS(Optimizer):
             current_evals += ls_func_evals
             state['func_evals'] += ls_func_evals
 
-            ############################################################
             # check conditions
-            ############################################################
             if n_iter == max_iter:
                 break
 
