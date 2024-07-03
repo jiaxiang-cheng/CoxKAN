@@ -10,22 +10,26 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import random
 import copy
+
 RESOURCE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "figures")
 
+
 class KAN(nn.Module):
-    '''
+    """
     KAN class
-    
+
     Attributes:
     -----------
         biases: a list of nn.Linear()
-            biases are added on nodes (in principle, biases can be absorbed into activation functions. However, we still have them for better optimization)
+            biases are added on nodes (in principle, biases can be absorbed into activation functions.
+            However, we still have them for better optimization)
         act_fun: a list of KANLayer
             KANLayers
         depth: int
             depth of KAN
         width: list
-            number of neurons in each layer. e.g., [2,5,5,3] means 2D inputs, 3D outputs, with 2 layers of 5 hidden neurons.
+            number of neurons in each layer. e.g., [2,5,5,3] means 2D inputs, 3D outputs,
+            with 2 layers of 5 hidden neurons.
         grid: int
             the number of grid intervals
         k: int
@@ -36,7 +40,7 @@ class KAN(nn.Module):
             Symbolic_KANLayers
         symbolic_enabled: bool
             If False, the symbolic front is not computed (to save time). Default: True.
-    
+
     Methods:
     --------
         __init__():
@@ -50,11 +54,12 @@ class KAN(nn.Module):
         forward():
             forward
         set_mode():
-            set the mode of an activation function: 'n' for numeric, 's' for symbolic, 'ns' for combined (note they are visualized differently in plot(). 'n' as black, 's' as red, 'ns' as purple). 
+            set the mode of an activation function: 'n' for numeric, 's' for symbolic, 'ns' for combined
+            (note they are visualized differently in plot(). 'n' as black, 's' as red, 'ns' as purple).
         fix_symbolic():
             fix an activation function to be symbolic
         suggest_symbolic():
-            suggest the symbolic candicates of a numeric spline-based activation function
+            suggest the symbolic candidates of a numeric spline-based activation function
         lock():
             lock activation functions to share parameters
         unlock():
@@ -75,17 +80,18 @@ class KAN(nn.Module):
             automatically fit all splines to be symbolic functions
         symbolic_formula():
             obtain the symbolic formula of the KAN network
-    '''
+    """
 
-    def __init__(self, width=None, grid=3, k=3, noise_scale=0.1, noise_scale_base=0.1, base_fun=torch.nn.SiLU(), symbolic_enabled=True, bias_trainable=True, grid_eps=1.0, grid_range=[-1, 1], sp_trainable=True, sb_trainable=True,
-                 device='cpu', seed=0):
-        '''
-        initalize a KAN model
-        
+    def __init__(self, width=None, grid=3, k=3, noise_scale=0.1, noise_scale_base=0.1, base_fun=torch.nn.SiLU(),
+                 symbolic_enabled=True, bias_trainable=True, grid_eps=1.0, grid_range=None, sp_trainable=True,
+                 sb_trainable=True, device='cpu', seed=0):
+        """
+        initialize a KAN model
+
         Args:
         -----
             width : list of int
-                :math:`[n_0, n_1, .., n_{L-1}]` specify the number of neurons in each layer (including inputs/outputs)
+                :math:`[n_0, n_1, ..., n_{L-1}]` specify the number of neurons in each layer (including inputs/outputs)
             grid : int
                 number of grid intervals. Default: 3.
             k : int
@@ -95,12 +101,13 @@ class KAN(nn.Module):
             base_fun : fun
                 the residual function b(x). Default: torch.nn.SiLU().
             symbolic_enabled : bool
-                compute or skip symbolic computations (for efficiency). By default: True. 
+                compute or skip symbolic computations (for efficiency). By default, True.
             bias_trainable : bool
-                bias parameters are updated or not. By default: True
+                bias parameters are updated or not. By default, True
             grid_eps : float
-                When grid_eps = 0, the grid is uniform; when grid_eps = 1, the grid is partitioned using percentiles of samples. 0 < grid_eps < 1 interpolates between the two extremes. Default: 0.02.
-            grid_range : list/np.array of shape (2,))
+                When grid_eps = 0, the grid is uniform; when grid_eps = 1, the grid is partitioned
+                using percentiles of samples. 0 < grid_eps < 1 interpolates between the two extremes. Default: 0.02.
+            grid_range : list/np.array of shape (2,)
                 setting the range of grids. Default: [-1,1].
             sp_trainable : bool
                 If true, scale_sp is trainable. Default: True.
@@ -110,18 +117,21 @@ class KAN(nn.Module):
                 device
             seed : int
                 random seed
-            
+
         Returns:
         --------
             self
-            
+
         Example
         -------
-        >>> model = KAN(width=[2,5,1], grid=5, k=3)
-        >>> (model.act_fun[0].in_dim, model.act_fun[0].out_dim), (model.act_fun[1].in_dim, model.act_fun[1].out_dim)
+        # >>> model = KAN(width=[2,5,1], grid=5, k=3)
+        # >>> (model.act_fun[0].in_dim, model.act_fun[0].out_dim), (model.act_fun[1].in_dim, model.act_fun[1].out_dim)
         ((2, 5), (5, 1))
-        '''
+        """
         super(KAN, self).__init__()
+
+        if grid_range is None:
+            grid_range = [-1, 1]
 
         torch.manual_seed(seed)
         np.random.seed(seed)
@@ -137,8 +147,11 @@ class KAN(nn.Module):
         for l in range(self.depth):
             # splines
             scale_base = 1 / np.sqrt(width[l]) + (torch.randn(width[l] * width[l + 1], ) * 2 - 1) * noise_scale_base
-            sp_batch = KANLayer(in_dim=width[l], out_dim=width[l + 1], num=grid, k=k, noise_scale=noise_scale, scale_base=scale_base, scale_sp=1., base_fun=base_fun, grid_eps=grid_eps, grid_range=grid_range, sp_trainable=sp_trainable,
-                                sb_trainable=sb_trainable, device=device)
+            sp_batch = KANLayer(
+                in_dim=width[l], out_dim=width[l + 1], num=grid, k=k, noise_scale=noise_scale,
+                scale_base=scale_base, scale_sp=1., base_fun=base_fun, grid_eps=grid_eps,
+                grid_range=grid_range, sp_trainable=sp_trainable, sb_trainable=sb_trainable, device=device
+            )
             self.act_fun.append(sp_batch)
 
             # bias
@@ -161,35 +174,35 @@ class KAN(nn.Module):
 
         self.symbolic_fun = nn.ModuleList(self.symbolic_fun)
         self.symbolic_enabled = symbolic_enabled
-        
+
         self.device = device
 
     def initialize_from_another_model(self, another_model, x):
-        '''
+        """
         initialize from a parent model. The parent has the same width as the current model but may have different grids.
-        
+
         Args:
         -----
             another_model : KAN
                 the parent model used to initialize the current model
             x : 2D torch.float
                 inputs, shape (batch, input dimension)
-        
+
         Returns:
         --------
             self : KAN
-            
+
         Example
         -------
-        >>> model_coarse = KAN(width=[2,5,1], grid=5, k=3)
-        >>> model_fine = KAN(width=[2,5,1], grid=10, k=3)
-        >>> print(model_fine.act_fun[0].coef[0][0].data)
-        >>> x = torch.normal(0,1,size=(100,2))
-        >>> model_fine.initialize_from_another_model(model_coarse, x);
-        >>> print(model_fine.act_fun[0].coef[0][0].data)
+        # >>> model_coarse = KAN(width=[2,5,1], grid=5, k=3)
+        # >>> model_fine = KAN(width=[2,5,1], grid=10, k=3)
+        # >>> print(model_fine.act_fun[0].coef[0][0].data)
+        # >>> x = torch.normal(0,1,size=(100,2))
+        # >>> model_fine.initialize_from_another_model(model_coarse, x);
+        # >>> print(model_fine.act_fun[0].coef[0][0].data)
         tensor(-0.0030)
         tensor(0.0506)
-        '''
+        """
         another_model(x.to(another_model.device))  # get activations
         batch = x.shape[0]
 
@@ -202,7 +215,10 @@ class KAN(nn.Module):
             # spb = spb_parent
             preacts = another_model.spline_preacts[l]
             postsplines = another_model.spline_postsplines[l]
-            self.act_fun[l].coef.data = curve2coef(preacts.reshape(batch, spb.size).permute(1, 0), postsplines.reshape(batch, spb.size).permute(1, 0), spb.grid, k=spb.k, device=self.device)
+            self.act_fun[l].coef.data = curve2coef(
+                preacts.reshape(batch, spb.size).permute(1, 0),
+                postsplines.reshape(batch, spb.size).permute(1, 0), spb.grid,
+                k=spb.k, device=self.device)
             spb.scale_base.data = spb_parent.scale_base.data
             spb.scale_sp.data = spb_parent.scale_sp.data
             spb.mask.data = spb_parent.mask.data
@@ -217,84 +233,84 @@ class KAN(nn.Module):
         return self
 
     def update_grid_from_samples(self, x):
-        '''
+        """
         update grid from samples
-        
+
         Args:
         -----
             x : 2D torch.float
                 inputs, shape (batch, input dimension)
-            
+
         Returns:
         --------
             None
-         
+
         Example
         -------
-        >>> model = KAN(width=[2,5,1], grid=5, k=3)
-        >>> print(model.act_fun[0].grid[0].data)
-        >>> x = torch.rand(100,2)*5
-        >>> model.update_grid_from_samples(x)
-        >>> print(model.act_fun[0].grid[0].data)
+        # >>> model = KAN(width=[2,5,1], grid=5, k=3)
+        # >>> print(model.act_fun[0].grid[0].data)
+        # >>> x = torch.rand(100,2)*5
+        # >>> model.update_grid_from_samples(x)
+        # >>> print(model.act_fun[0].grid[0].data)
         tensor([-1.0000, -0.6000, -0.2000,  0.2000,  0.6000,  1.0000])
         tensor([0.0128, 1.0064, 2.0000, 2.9937, 3.9873, 4.9809])
-        '''
+        """
         for l in range(self.depth):
             self.forward(x)
             self.act_fun[l].update_grid_from_samples(self.acts[l])
 
     def initialize_grid_from_another_model(self, model, x):
-        '''
+        """
         initialize grid from a parent model
-        
+
         Args:
         -----
             model : KAN
                 parent model
             x : 2D torch.float
                 inputs, shape (batch, input dimension)
-            
+
         Returns:
         --------
             None
-        
+
         Example
         -------
-        >>> model_parent = KAN(width=[1,1], grid=5, k=3)
-        >>> model_parent.act_fun[0].grid.data = torch.linspace(-2,2,steps=6)[None,:]
-        >>> x = torch.linspace(-2,2,steps=1001)[:,None]
-        >>> model = KAN(width=[1,1], grid=5, k=3)
-        >>> print(model.act_fun[0].grid.data)
-        >>> model = model.initialize_from_another_model(model_parent, x)
-        >>> print(model.act_fun[0].grid.data)
+        # >>> model_parent = KAN(width=[1,1], grid=5, k=3)
+        # >>> model_parent.act_fun[0].grid.data = torch.linspace(-2,2,steps=6)[None,:]
+        # >>> x = torch.linspace(-2,2,steps=1001)[:,None]
+        # >>> model = KAN(width=[1,1], grid=5, k=3)
+        # >>> print(model.act_fun[0].grid.data)
+        # >>> model = model.initialize_from_another_model(model_parent, x)
+        # >>> print(model.act_fun[0].grid.data)
         tensor([[-1.0000, -0.6000, -0.2000,  0.2000,  0.6000,  1.0000]])
         tensor([[-2.0000, -1.2000, -0.4000,  0.4000,  1.2000,  2.0000]])
-        '''
+        """
         model(x)
         for l in range(self.depth):
             self.act_fun[l].initialize_grid_from_parent(model.act_fun[l], model.acts[l])
 
     def forward(self, x):
-        '''
+        """
         KAN forward
-        
+
         Args:
         -----
             x : 2D torch.float
                 inputs, shape (batch, input dimension)
-            
+
         Returns:
         --------
             y : 2D torch.float
                 outputs, shape (batch, output dimension)
-            
+
         Example
         -------
-        >>> model = KAN(width=[2,5,3], grid=5, k=3)
-        >>> x = torch.normal(0,1,size=(100,2))
-        >>> model(x).shape
+        # >>> model = KAN(width=[2,5,3], grid=5, k=3)
+        # >>> x = torch.normal(0,1,size=(100,2))
+        # >>> model(x).shape
         torch.Size([100, 3])
-        '''
+        """
 
         self.acts = []  # shape ([batch, n0], [batch, n1], ..., [batch, n_L])
         self.spline_preacts = []
@@ -335,9 +351,9 @@ class KAN(nn.Module):
         return x
 
     def set_mode(self, l, i, j, mode, mask_n=None):
-        '''
-        set (l,i,j) activation to have mode 
-        
+        """
+        set (l,i,j) activation to have mode
+
         Args:
         -----
             l : int
@@ -350,11 +366,11 @@ class KAN(nn.Module):
                 'n' (numeric) or 's' (symbolic) or 'ns' (combined)
             mask_n : None or float)
                 magnitude of the numeric front
-        
+
         Returns:
         --------
             None
-        '''
+        """
         if mode == "s":
             mask_n = 0.;
             mask_s = 1.
@@ -374,10 +390,11 @@ class KAN(nn.Module):
         self.act_fun[l].mask.data[j * self.act_fun[l].in_dim + i] = mask_n
         self.symbolic_fun[l].mask.data[j, i] = mask_s
 
-    def fix_symbolic(self, l, i, j, fun_name, fit_params_bool=True, a_range=(-10, 10), b_range=(-10, 10), verbose=True, random=False):
-        '''
+    def fix_symbolic(self, l, i, j, fun_name, fit_params_bool=True, a_range=(-10, 10),
+                     b_range=(-10, 10), verbose=True, random=False):
+        """
         set (l,i,j) activation to be symbolic (specified by fun_name)
-        
+
         Args:
         -----
             l : int
@@ -398,39 +415,39 @@ class KAN(nn.Module):
                 If True, more information is printed.
             random : bool
                 initialize affine parameteres randomly or as [1,0,1,0]
-        
+
         Returns:
         --------
             None or r2 (coefficient of determination)
-            
-        Example 1 
+
+        Example 1
         ---------
-        >>> # when fit_params_bool = False
-        >>> model = KAN(width=[2,5,1], grid=5, k=3)
-        >>> model.fix_symbolic(0,1,3,'sin',fit_params_bool=False)
-        >>> print(model.act_fun[0].mask.reshape(2,5))
-        >>> print(model.symbolic_fun[0].mask.reshape(2,5))
+        # >>> # when fit_params_bool = False
+        # >>> model = KAN(width=[2,5,1], grid=5, k=3)
+        # >>> model.fix_symbolic(0,1,3,'sin',fit_params_bool=False)
+        # >>> print(model.act_fun[0].mask.reshape(2,5))
+        # >>> print(model.symbolic_fun[0].mask.reshape(2,5))
         tensor([[1., 1., 1., 1., 1.],
                 [1., 1., 0., 1., 1.]])
         tensor([[0., 0., 0., 0., 0.],
                 [0., 0., 1., 0., 0.]])
-                    
+
         Example 2
         ---------
-        >>> # when fit_params_bool = True
-        >>> model = KAN(width=[2,5,1], grid=5, k=3, noise_scale=1.)
-        >>> x = torch.normal(0,1,size=(100,2))
-        >>> model(x) # obtain activations (otherwise model does not have attributes acts)
-        >>> model.fix_symbolic(0,1,3,'sin',fit_params_bool=True)
-        >>> print(model.act_fun[0].mask.reshape(2,5))
-        >>> print(model.symbolic_fun[0].mask.reshape(2,5))
+        # >>> # when fit_params_bool = True
+        # >>> model = KAN(width=[2,5,1], grid=5, k=3, noise_scale=1.)
+        # >>> x = torch.normal(0,1,size=(100,2))
+        # >>> model(x) # obtain activations (otherwise model does not have attributes acts)
+        # >>> model.fix_symbolic(0,1,3,'sin',fit_params_bool=True)
+        # >>> print(model.act_fun[0].mask.reshape(2,5))
+        # >>> print(model.symbolic_fun[0].mask.reshape(2,5))
         r2 is 0.8131332993507385
         r2 is not very high, please double check if you are choosing the correct symbolic function.
         tensor([[1., 1., 1., 1., 1.],
                 [1., 1., 0., 1., 1.]])
         tensor([[0., 0., 0., 0., 0.],
                 [0., 0., 1., 0., 0.]])
-        '''
+        """
         self.set_mode(l, i, j, mode="s")
         if not fit_params_bool:
             self.symbolic_fun[l].fix_symbolic(i, j, fun_name, verbose=verbose, random=random)
@@ -438,85 +455,86 @@ class KAN(nn.Module):
         else:
             x = self.acts[l][:, i]
             y = self.spline_postacts[l][:, j, i]
-            r2 = self.symbolic_fun[l].fix_symbolic(i, j, fun_name, x, y, a_range=a_range, b_range=b_range, verbose=verbose)
+            r2 = self.symbolic_fun[l].fix_symbolic(i, j, fun_name, x, y, a_range=a_range, b_range=b_range,
+                                                   verbose=verbose)
             return r2
 
     def unfix_symbolic(self, l, i, j):
-        '''
+        """
         unfix the (l,i,j) activation function.
-        '''
+        """
         self.set_mode(l, i, j, mode="n")
 
     def unfix_symbolic_all(self):
-        '''
+        """
         unfix all activation functions.
-        '''
+        """
         for l in range(len(self.width) - 1):
             for i in range(self.width[l]):
                 for j in range(self.width[l + 1]):
                     self.unfix_symbolic(l, i, j)
 
     def lock(self, l, ids):
-        '''
+        """
         lock ids in the l-th layer to be the same function
-        
+
         Args:
         -----
             l : int
                 layer index
             ids : 2D list
                 :math:`[[i_1,j_1],[i_2,j_2],...]` set :math:`(l,i_i,j_1), (l,i_2,j_2), ...` to be the same function
-        
+
         Returns:
         --------
             None
-         
+
         Example
         -------
-        >>> model = KAN(width=[2,3,1], grid=5, k=3, noise_scale=1.)
-        >>> print(model.act_fun[0].weight_sharing.reshape(3,2))
-        >>> model.lock(0,[[1,0],[1,1]])
-        >>> print(model.act_fun[0].weight_sharing.reshape(3,2))
+        # >>> model = KAN(width=[2,3,1], grid=5, k=3, noise_scale=1.)
+        # >>> print(model.act_fun[0].weight_sharing.reshape(3,2))
+        # >>> model.lock(0,[[1,0],[1,1]])
+        # >>> print(model.act_fun[0].weight_sharing.reshape(3,2))
         tensor([[0, 1],
                 [2, 3],
                 [4, 5]])
         tensor([[0, 1],
                 [2, 1],
                 [4, 5]])
-        '''
+        """
         self.act_fun[l].lock(ids)
 
     def unlock(self, l, ids):
-        '''
+        """
         unlock ids in the l-th layer to be the same function
-        
+
         Args:
         -----
             l : int
                 layer index
             ids : 2D list)
                 [[i1,j1],[i2,j2],...] set (l,ii,j1), (l,i2,j2), ... to be unlocked
-            
+
         Example:
         --------
-        >>> model = KAN(width=[2,3,1], grid=5, k=3, noise_scale=1.)
-        >>> model.lock(0,[[1,0],[1,1]])
-        >>> print(model.act_fun[0].weight_sharing.reshape(3,2))
-        >>> model.unlock(0,[[1,0],[1,1]])
-        >>> print(model.act_fun[0].weight_sharing.reshape(3,2))
+        # >>> model = KAN(width=[2,3,1], grid=5, k=3, noise_scale=1.)
+        # >>> model.lock(0,[[1,0],[1,1]])
+        # >>> print(model.act_fun[0].weight_sharing.reshape(3,2))
+        # >>> model.unlock(0,[[1,0],[1,1]])
+        # >>> print(model.act_fun[0].weight_sharing.reshape(3,2))
         tensor([[0, 1],
                 [2, 1],
                 [4, 5]])
         tensor([[0, 1],
                 [2, 3],
                 [4, 5]])
-        '''
+        """
         self.act_fun[l].unlock(ids)
 
     def get_range(self, l, i, j, verbose=True):
-        '''
+        """
         Get the input range and output range of the (l,i,j) activation
-        
+
         Args:
         -----
             l : int
@@ -525,7 +543,7 @@ class KAN(nn.Module):
                 input neuron index
             j : int
                 output neuron index
-        
+
         Returns:
         --------
             x_min : float
@@ -536,17 +554,17 @@ class KAN(nn.Module):
                 minimum of output
             y_max : float
                 maximum of output
-        
+
         Example
         -------
-        >>> model = KAN(width=[2,3,1], grid=5, k=3, noise_scale=1.)
-        >>> x = torch.normal(0,1,size=(100,2))
-        >>> model(x) # do a forward pass to obtain model.acts
-        >>> model.get_range(0,0,0)
+        # >>> model = KAN(width=[2,3,1], grid=5, k=3, noise_scale=1.)
+        # >>> x = torch.normal(0,1,size=(100,2))
+        # >>> model(x) # do a forward pass to obtain model.acts
+        # >>> model.get_range(0,0,0)
         x range: [-2.13 , 2.75 ]
         y range: [-0.50 , 1.83 ]
         (tensor(-2.1288), tensor(2.7498), tensor(-0.5042), tensor(1.8275))
-        '''
+        """
         x = self.spline_preacts[l][:, j, i]
         y = self.spline_postacts[l][:, j, i]
         x_min = torch.min(x)
@@ -558,10 +576,11 @@ class KAN(nn.Module):
             print('y range: [' + '%.2f' % y_min, ',', '%.2f' % y_max, ']')
         return x_min, x_max, y_min, y_max
 
-    def plot(self, folder="./figures", beta=3, mask=False, mode="supervised", scale=0.5, tick=False, sample=False, in_vars=None, out_vars=None, title=None):
-        '''
+    def plot(self, folder="./figures", beta=3, mask=False, mode="supervised", scale=0.5, tick=False, sample=False,
+             in_vars=None, out_vars=None, title=None):
+        """
         plot KAN
-        
+
         Args:
         -----
             folder : str
@@ -569,9 +588,11 @@ class KAN(nn.Module):
             beta : float
                 positive number. control the transparency of each activation. transparency = tanh(beta*l1).
             mask : bool
-                If True, plot with mask (need to run prune() first to obtain mask). If False (by default), plot all activation functions.
+                If True, plot with mask (need to run prune() first to obtain mask). If False (by default),
+                plot all activation functions.
             mode : bool
-                "supervised" or "unsupervised". If "supervised", l1 is measured by absolution value (not subtracting mean); if "unsupervised", l1 is measured by standard deviation (subtracting mean).
+                "supervised" or "unsupervised". If "supervised", l1 is measured by absolution value
+                (not subtracting mean); if "unsupervised", l1 is measured by standard deviation (subtracting mean).
             scale : float
                 control the size of the diagram
             in_vars: None or list of str
@@ -580,19 +601,19 @@ class KAN(nn.Module):
                 the name(s) of output variables
             title: None or str
                 title
-            
+
         Returns:
         --------
             Figure
-            
+
         Example
         -------
-        >>> # see more interactive examples in demos
-        >>> model = KAN(width=[2,3,1], grid=3, k=3, noise_scale=1.0)
-        >>> x = torch.normal(0,1,size=(100,2))
-        >>> model(x) # do a forward pass to obtain model.acts
-        >>> model.plot()
-        '''
+        # >>> # see more interactive examples in demos
+        # >>> model = KAN(width=[2,3,1], grid=3, k=3, noise_scale=1.0)
+        # >>> x = torch.normal(0,1,size=(100,2))
+        # >>> model(x) # do a forward pass to obtain model.acts
+        # >>> model.plot()
+        """
         if not os.path.exists(folder):
             os.makedirs(folder)
         # matplotlib.use('Agg')
@@ -637,9 +658,12 @@ class KAN(nn.Module):
                     plt.gca().patch.set_linewidth(1.5)
                     # plt.axis('off')
 
-                    plt.plot(self.acts[l][:, i][rank].cpu().detach().numpy(), self.spline_postacts[l][:, j, i][rank].cpu().detach().numpy(), color=color, lw=5)
+                    plt.plot(self.acts[l][:, i][rank].cpu().detach().numpy(),
+                             self.spline_postacts[l][:, j, i][rank].cpu().detach().numpy(), color=color, lw=5)
                     if sample == True:
-                        plt.scatter(self.acts[l][:, i][rank].cpu().detach().numpy(), self.spline_postacts[l][:, j, i][rank].cpu().detach().numpy(), color=color, s=400 * scale ** 2)
+                        plt.scatter(self.acts[l][:, i][rank].cpu().detach().numpy(),
+                                    self.spline_postacts[l][:, j, i][rank].cpu().detach().numpy(), color=color,
+                                    s=400 * scale ** 2)
                     plt.gca().spines[:].set_color(color)
 
                     lock_id = self.act_fun[l].lock_id[j * self.width[l] + i].long().item()
@@ -706,12 +730,22 @@ class KAN(nn.Module):
                         if symbol_mask == 0. and numerical_mask == 0.:
                             color = "white"
                             alpha_mask = 0.
-                        if mask == True:
-                            plt.plot([1 / (2 * n) + i / n, 1 / (2 * N) + id_ / N], [l * y0, (l + 1 / 2) * y0 - y1], color=color, lw=2 * scale, alpha=alpha[l][j][i] * self.mask[l][i].item() * self.mask[l + 1][j].item())
-                            plt.plot([1 / (2 * N) + id_ / N, 1 / (2 * n_next) + j / n_next], [(l + 1 / 2) * y0 + y1, (l + 1) * y0], color=color, lw=2 * scale, alpha=alpha[l][j][i] * self.mask[l][i].item() * self.mask[l + 1][j].item())
+
+                        if mask:
+                            plt.plot(
+                                [1 / (2 * n) + i / n, 1 / (2 * N) + id_ / N], [l * y0, (l + 1 / 2) * y0 - y1],
+                                color=color, lw=2 * scale,
+                                alpha=alpha[l][j][i] * self.mask[l][i].item() * self.mask[l + 1][j].item())
+                            plt.plot([1 / (2 * N) + id_ / N, 1 / (2 * n_next) + j / n_next],
+                                     [(l + 1 / 2) * y0 + y1, (l + 1) * y0], color=color, lw=2 * scale,
+                                     alpha=alpha[l][j][i] * self.mask[l][i].item() * self.mask[l + 1][j].item())
                         else:
-                            plt.plot([1 / (2 * n) + i / n, 1 / (2 * N) + id_ / N], [l * y0, (l + 1 / 2) * y0 - y1], color=color, lw=2 * scale, alpha=alpha[l][j][i] * alpha_mask)
-                            plt.plot([1 / (2 * N) + id_ / N, 1 / (2 * n_next) + j / n_next], [(l + 1 / 2) * y0 + y1, (l + 1) * y0], color=color, lw=2 * scale, alpha=alpha[l][j][i] * alpha_mask)
+                            plt.plot(
+                                [1 / (2 * n) + i / n, 1 / (2 * N) + id_ / N], [l * y0, (l + 1 / 2) * y0 - y1],
+                                color=color, lw=2 * scale, alpha=alpha[l][j][i] * alpha_mask)
+                            plt.plot([1 / (2 * N) + id_ / N, 1 / (2 * n_next) + j / n_next],
+                                     [(l + 1 / 2) * y0 + y1, (l + 1) * y0], color=color, lw=2 * scale,
+                                     alpha=alpha[l][j][i] * alpha_mask)
 
             plt.xlim(0, 1)
             plt.ylim(-0.1 * y0, (neuron_depth - 1 + 0.1) * y0)
@@ -739,29 +773,35 @@ class KAN(nn.Module):
                     up = DC_to_NFC([0, (l + 1 / 2) * y0 + y1])[1]
                     newax = fig.add_axes([left, bottom, right - left, up - bottom])
                     # newax = fig.add_axes([1/(2*N)+id_/N-y1, (l+1/2)*y0-y1, y1, y1], anchor='NE')
-                    if mask == False:
+                    if not mask:
                         newax.imshow(im, alpha=alpha[l][j][i])
                     else:
-                        ### make sure to run model.prune() first to compute mask ###
+                        # make sure to run model.prune() first to compute mask
                         newax.imshow(im, alpha=alpha[l][j][i] * self.mask[l][i].item() * self.mask[l + 1][j].item())
                     newax.axis('off')
 
-        if in_vars != None:
+        if in_vars is not None:
             n = self.width[0]
             for i in range(n):
-                plt.gcf().get_axes()[0].text(1 / (2 * (n)) + i / (n), -0.1, in_vars[i], fontsize=40 * scale, horizontalalignment='center', verticalalignment='center')
+                plt.gcf().get_axes()[0].text(1 / (2 * (n)) + i / (n), -0.1, in_vars[i], fontsize=40 * scale,
+                                             horizontalalignment='center', verticalalignment='center')
 
-        if out_vars != None:
+        if out_vars is not None:
             n = self.width[-1]
             for i in range(n):
-                plt.gcf().get_axes()[0].text(1 / (2 * (n)) + i / (n), y0 * (len(self.width) - 1) + 0.1, out_vars[i], fontsize=40 * scale, horizontalalignment='center', verticalalignment='center')
+                plt.gcf().get_axes()[0].text(1 / (2 * (n)) + i / (n), y0 * (len(self.width) - 1) + 0.1, out_vars[i],
+                                             fontsize=40 * scale, horizontalalignment='center',
+                                             verticalalignment='center')
 
-        if title != None:
-            plt.gcf().get_axes()[0].text(0.5, y0 * (len(self.width) - 1) + 0.2, title, fontsize=40 * scale, horizontalalignment='center', verticalalignment='center')
+        if title is not None:
+            plt.gcf().get_axes()[0].text(0.5, y0 * (len(self.width) - 1) + 0.2, title, fontsize=40 * scale,
+                                         horizontalalignment='center', verticalalignment='center')
 
-    def train(self, dataset, opt="LBFGS", steps=100, log=1, lamb=0., lamb_l1=1., lamb_entropy=2., lamb_coef=0., lamb_coefdiff=0., update_grid=True, grid_update_num=10, loss_fn=None, lr=1., stop_grid_update_step=50, batch=-1,
-              small_mag_threshold=1e-16, small_reg_factor=1., metrics=None, sglr_avoid=False, save_fig=False, in_vars=None, out_vars=None, beta=3, save_fig_freq=1, img_folder='./video', device='cpu'):
-        '''
+    def train(self, dataset, opt="LBFGS", steps=100, log=1, lamb=0., lamb_l1=1., lamb_entropy=2., lamb_coef=0.,
+              lamb_coefdiff=0., update_grid=True, grid_update_num=10, loss_fn=None, lr=1., stop_grid_update_step=50,
+              batch=-1, small_mag_threshold=1e-16, small_reg_factor=1., metrics=None, sglr_avoid=False, save_fig=False,
+              in_vars=None, out_vars=None, beta=3, save_fig_freq=1, img_folder='./video', device='cpu'):
+        """
         training
 
         Args:
@@ -797,7 +837,7 @@ class KAN(nn.Module):
             small_reg_factor : float
                 penalty strength applied to small factors relative to large factos
             device : str
-                device   
+                device
             save_fig_freq : int
                 save figure every (save_fig_freq) step
 
@@ -810,14 +850,14 @@ class KAN(nn.Module):
 
         Example
         -------
-        >>> # for interactive examples, please see demos
-        >>> from utils import create_dataset
-        >>> model = KAN(width=[2,5,1], grid=5, k=3, noise_scale=0.1, seed=0)
-        >>> f = lambda x: torch.exp(torch.sin(torch.pi*x[:,[0]]) + x[:,[1]]**2)
-        >>> dataset = create_dataset(f, n_var=2)
-        >>> model.train(dataset, opt='LBFGS', steps=50, lamb=0.01);
-        >>> model.plot()
-        '''
+        # >>> # for interactive examples, please see demos
+        # >>> from utils import create_dataset
+        # >>> model = KAN(width=[2,5,1], grid=5, k=3, noise_scale=0.1, seed=0)
+        # >>> f = lambda x: torch.exp(torch.sin(torch.pi*x[:,[0]]) + x[:,[1]]**2)
+        # >>> dataset = create_dataset(f, n_var=2)
+        # >>> model.train(dataset, opt='LBFGS', steps=50, lamb=0.01);
+        # >>> model.plot()
+        """
 
         def reg(acts_scale):
 
@@ -843,7 +883,7 @@ class KAN(nn.Module):
 
         pbar = tqdm(range(steps), desc='description', ncols=100)
 
-        if loss_fn == None:
+        if loss_fn is None:
             loss_fn = loss_fn_eval = lambda x, y: torch.mean((x - y) ** 2)
         else:
             loss_fn = loss_fn_eval = loss_fn
@@ -853,13 +893,11 @@ class KAN(nn.Module):
         if opt == "Adam":
             optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         elif opt == "LBFGS":
-            optimizer = LBFGS(self.parameters(), lr=lr, history_size=10, line_search_fn="strong_wolfe", tolerance_grad=1e-32, tolerance_change=1e-32, tolerance_ys=1e-32)
+            optimizer = LBFGS(self.parameters(), lr=lr, history_size=10, line_search_fn="strong_wolfe",
+                              tolerance_grad=1e-32, tolerance_change=1e-32, tolerance_ys=1e-32)
 
-        results = {}
-        results['train_loss'] = []
-        results['test_loss'] = []
-        results['reg'] = []
-        if metrics != None:
+        results = {'train_loss': [], 'test_loss': [], 'reg': []}
+        if metrics is not None:
             for i in range(len(metrics)):
                 results[metrics[i].__name__] = []
 
@@ -876,7 +914,7 @@ class KAN(nn.Module):
             global train_loss, reg_
             optimizer.zero_grad()
             pred = self.forward(dataset['train_input'][train_id].to(device))
-            if sglr_avoid == True:
+            if sglr_avoid:
                 id_ = torch.where(torch.isnan(torch.sum(pred, dim=1)) == False)[0]
                 train_loss = loss_fn(pred[id_], dataset['train_label'][train_id][id_].to(device))
             else:
@@ -903,7 +941,7 @@ class KAN(nn.Module):
 
             if opt == "Adam":
                 pred = self.forward(dataset['train_input'][train_id].to(device))
-                if sglr_avoid == True:
+                if sglr_avoid:
                     id_ = torch.where(torch.isnan(torch.sum(pred, dim=1)) == False)[0]
                     train_loss = loss_fn(pred[id_], dataset['train_label'][train_id][id_].to(device))
                 else:
@@ -914,12 +952,15 @@ class KAN(nn.Module):
                 loss.backward()
                 optimizer.step()
 
-            test_loss = loss_fn_eval(self.forward(dataset['test_input'][test_id].to(device)), dataset['test_label'][test_id].to(device))
+            test_loss = loss_fn_eval(self.forward(dataset['test_input'][test_id].to(device)),
+                                     dataset['test_label'][test_id].to(device))
 
             if _ % log == 0:
-                pbar.set_description("train loss: %.2e | test loss: %.2e | reg: %.2e " % (torch.sqrt(train_loss).cpu().detach().numpy(), torch.sqrt(test_loss).cpu().detach().numpy(), reg_.cpu().detach().numpy()))
+                pbar.set_description("train loss: %.2e | test loss: %.2e | reg: %.2e " % (
+                    torch.sqrt(train_loss).cpu().detach().numpy(), torch.sqrt(test_loss).cpu().detach().numpy(),
+                    reg_.cpu().detach().numpy()))
 
-            if metrics != None:
+            if metrics is not None:
                 for i in range(len(metrics)):
                     results[metrics[i].__name__].append(metrics[i]().item())
 
@@ -935,34 +976,36 @@ class KAN(nn.Module):
         return results
 
     def prune(self, threshold=1e-2, mode="auto", active_neurons_id=None):
-        '''
+        """
         pruning KAN on the node level. If a node has small incoming or outgoing connection, it will be pruned away.
-        
+
         Args:
         -----
             threshold : float
                 the threshold used to determine whether a node is small enough
             mode : str
-                "auto" or "manual". If "auto", the thresold will be used to automatically prune away nodes. If "manual", active_neuron_id is needed to specify which neurons are kept (others are thrown away).
+                "auto" or "manual". If "auto", the thresold will be used to automatically prune away nodes.
+                If "manual", active_neuron_id is needed to specify which neurons are kept (others are thrown away).
             active_neuron_id : list of id lists
-                For example, [[0,1],[0,2,3]] means keeping the 0/1 neuron in the 1st hidden layer and the 0/2/3 neuron in the 2nd hidden layer. Pruning input and output neurons is not supported yet.
-            
+                For example, [[0,1],[0,2,3]] means keeping the 0/1 neuron in the 1st hidden layer and the 0/2/3 neuron
+                in the 2nd hidden layer. Pruning input and output neurons is not supported yet.
+
         Returns:
         --------
             model2 : KAN
                 pruned model
-         
+
         Example
         -------
-        >>> # for more interactive examples, please see demos
-        >>> from utils import create_dataset
-        >>> model = KAN(width=[2,5,1], grid=5, k=3, noise_scale=0.1, seed=0)
-        >>> f = lambda x: torch.exp(torch.sin(torch.pi*x[:,[0]]) + x[:,[1]]**2)
-        >>> dataset = create_dataset(f, n_var=2)
-        >>> model.train(dataset, opt='LBFGS', steps=50, lamb=0.01);
-        >>> model.prune()
-        >>> model.plot(mask=True)
-        '''
+        # >>> # for more interactive examples, please see demos
+        # >>> from utils import create_dataset
+        # >>> model = KAN(width=[2,5,1], grid=5, k=3, noise_scale=0.1, seed=0)
+        # >>> f = lambda x: torch.exp(torch.sin(torch.pi*x[:,[0]]) + x[:,[1]]**2)
+        # >>> dataset = create_dataset(f, n_var=2)
+        # >>> model.train(dataset, opt='LBFGS', steps=50, lamb=0.01);
+        # >>> model.prune()
+        # >>> model.plot(mask=True)
+        """
         mask = [torch.ones(self.width[0], )]
         active_neurons = [list(range(self.width[0]))]
         for i in range(len(self.acts_scale) - 1):
@@ -999,9 +1042,9 @@ class KAN(nn.Module):
         return model2
 
     def remove_edge(self, l, i, j):
-        '''
-        remove activtion phi(l,i,j) (set its mask to zero)
-        
+        """
+        remove activation phi(l,i,j) (set its mask to zero)
+
         Args:
         -----
             l : int
@@ -1010,74 +1053,75 @@ class KAN(nn.Module):
                 input neuron index
             j : int
                 output neuron index
-        
+
         Returns:
         --------
             None
-        '''
+        """
         self.act_fun[l].mask[j * self.width[l] + i] = 0.
 
     def remove_node(self, l, i):
-        '''
+        """
         remove neuron (l,i) (set the masks of all incoming and outgoing activation functions to zero)
-        
+
         Args:
         -----
             l : int
                 layer index
             i : int
                 neuron index
-        
+
         Returns:
         --------
             None
-        '''
+        """
         self.act_fun[l - 1].mask[i * self.width[l - 1] + torch.arange(self.width[l - 1])] = 0.
         self.act_fun[l].mask[torch.arange(self.width[l + 1]) * self.width[l] + i] = 0.
         self.symbolic_fun[l - 1].mask[i, :] *= 0.
         self.symbolic_fun[l].mask[:, i] *= 0.
 
     def suggest_symbolic(self, l, i, j, a_range=(-10, 10), b_range=(-10, 10), lib=None, topk=5, verbose=True):
-        '''suggest the symbolic candidates of phi(l,i,j)
-        
+        """
+        suggest the symbolic candidates of phi(l,i,j)
+
         Args:
         -----
             l : int
                 layer index
-            i : int 
+            i : int
                 input neuron index
-            j : int 
+            j : int
                 output neuron index
             lib : dic
-                library of symbolic bases. If lib = None, the global default library will be used. 
+                library of symbolic bases. If lib = None, the global default library will be used.
             topk : int
                 display the top k symbolic functions (according to r2)
             verbose : bool
                 If True, more information will be printed.
-           
+
         Returns:
         --------
             None
-            
+
         Example
         -------
-        >>> model = KAN(width=[2,5,1], grid=5, k=3, noise_scale=0.1, seed=0)
-        >>> f = lambda x: torch.exp(torch.sin(torch.pi*x[:,[0]]) + x[:,[1]]**2)
-        >>> dataset = create_dataset(f, n_var=2)
-        >>> model.train(dataset, opt='LBFGS', steps=50, lamb=0.01);
-        >>> model = model.prune()
-        >>> model(dataset['train_input'])
-        >>> model.suggest_symbolic(0,0,0)
+        # >>> model = KAN(width=[2,5,1], grid=5, k=3, noise_scale=0.1, seed=0)
+        # >>> f = lambda x: torch.exp(torch.sin(torch.pi*x[:,[0]]) + x[:,[1]]**2)
+        # >>> dataset = create_dataset(f, n_var=2)
+        # >>> model.train(dataset, opt='LBFGS', steps=50, lamb=0.01);
+        # >>> model = model.prune()
+        # >>> model(dataset['train_input'])
+        # >>> model.suggest_symbolic(0,0,0)
         function , r2
         sin , 0.9994412064552307
         gaussian , 0.9196369051933289
         tanh , 0.8608126044273376
         sigmoid , 0.8578218817710876
         arctan , 0.842217743396759
-        '''
+        """
         r2s = []
 
-        if lib == None:
+        if lib is None:
             symbolic_lib = SYMBOLIC_LIB
         else:
             symbolic_lib = {}
@@ -1093,7 +1137,7 @@ class KAN(nn.Module):
         sorted_ids = np.argsort(r2s)[::-1][:topk]
         r2s = np.array(r2s)[sorted_ids][:topk]
         topk = np.minimum(topk, len(symbolic_lib))
-        if verbose == True:
+        if verbose:
             print('function', ',', 'r2')
             for i in range(topk):
                 print(list(symbolic_lib.items())[sorted_ids[i]][0], ',', r2s[i])
@@ -1104,65 +1148,67 @@ class KAN(nn.Module):
         return best_name, best_fun, best_r2
 
     def auto_symbolic(self, a_range=(-10, 10), b_range=(-10, 10), lib=None, verbose=1):
-        '''
-        automatic symbolic regression: using top 1 suggestion from suggest_symbolic to replace splines with symbolic activations
-        
+        """
+        automatic symbolic regression: using top 1 suggestion from suggest_symbolic
+        to replace splines with symbolic activations
+
         Args:
         -----
             lib : None or a list of function names
-                the symbolic library 
+                the symbolic library
             verbose : int
                 verbosity
-                
+
         Returns:
         --------
             None (print suggested symbolic formulas)
-            
+
         Example 1
         ---------
-        >>> # default library
-        >>> from utils import create_dataset
-        >>> model = KAN(width=[2,5,1], grid=5, k=3, noise_scale=0.1, seed=0)
-        >>> f = lambda x: torch.exp(torch.sin(torch.pi*x[:,[0]]) + x[:,[1]]**2)
-        >>> dataset = create_dataset(f, n_var=2)
-        >>> model.train(dataset, opt='LBFGS', steps=50, lamb=0.01);
-        >>> >>> model = model.prune()
-        >>> model(dataset['train_input'])
-        >>> model.auto_symbolic()
+        # >>> # default library
+        # >>> from utils import create_dataset
+        # >>> model = KAN(width=[2,5,1], grid=5, k=3, noise_scale=0.1, seed=0)
+        # >>> f = lambda x: torch.exp(torch.sin(torch.pi*x[:,[0]]) + x[:,[1]]**2)
+        # >>> dataset = create_dataset(f, n_var=2)
+        # >>> model.train(dataset, opt='LBFGS', steps=50, lamb=0.01);
+        # >>> >>> model = model.prune()
+        # >>> model(dataset['train_input'])
+        # >>> model.auto_symbolic()
         fixing (0,0,0) with sin, r2=0.9994837045669556
         fixing (0,1,0) with cosh, r2=0.9978033900260925
         fixing (1,0,0) with arctan, r2=0.9997088313102722
-        
+
         Example 2
         ---------
-        >>> # customized library
-        >>> from utils import create_dataset
-        >>> model = KAN(width=[2,5,1], grid=5, k=3, noise_scale=0.1, seed=0)
-        >>> f = lambda x: torch.exp(torch.sin(torch.pi*x[:,[0]]) + x[:,[1]]**2)
-        >>> dataset = create_dataset(f, n_var=2)
-        >>> model.train(dataset, opt='LBFGS', steps=50, lamb=0.01);
-        >>> >>> model = model.prune()
-        >>> model(dataset['train_input'])
-        >>> model.auto_symbolic(lib=['exp','sin','x^2'])
+        # >>> # customized library
+        # >>> from utils import create_dataset
+        # >>> model = KAN(width=[2,5,1], grid=5, k=3, noise_scale=0.1, seed=0)
+        # >>> f = lambda x: torch.exp(torch.sin(torch.pi*x[:,[0]]) + x[:,[1]]**2)
+        # >>> dataset = create_dataset(f, n_var=2)
+        # >>> model.train(dataset, opt='LBFGS', steps=50, lamb=0.01);
+        # >>> >>> model = model.prune()
+        # >>> model(dataset['train_input'])
+        # >>> model.auto_symbolic(lib=['exp','sin','x^2'])
         fixing (0,0,0) with sin, r2=0.999411404132843
         fixing (0,1,0) with x^2, r2=0.9962921738624573
         fixing (1,0,0) with exp, r2=0.9980258941650391
-        '''
+        """
         for l in range(len(self.width) - 1):
             for i in range(self.width[l]):
                 for j in range(self.width[l + 1]):
                     if self.symbolic_fun[l].mask[j, i] > 0.:
                         print(f'skipping ({l},{i},{j}) since already symbolic')
                     else:
-                        name, fun, r2 = self.suggest_symbolic(l, i, j, a_range=a_range, b_range=b_range, lib=lib, verbose=False)
+                        name, fun, r2 = self.suggest_symbolic(l, i, j, a_range=a_range, b_range=b_range, lib=lib,
+                                                              verbose=False)
                         self.fix_symbolic(l, i, j, name, verbose=verbose > 1)
                         if verbose >= 1:
                             print(f'fixing ({l},{i},{j}) with {name}, r2={r2}')
 
-    def symbolic_formula(self, floating_digit=2, var=None, normalizer=None, simplify=False, output_normalizer = None ):
-        '''
+    def symbolic_formula(self, floating_digit=2, var=None, normalizer=None, simplify=False, output_normalizer=None):
+        """
         obtain the symbolic formula
-        
+
         Args:
         -----
             floating_digit : int
@@ -1175,23 +1221,23 @@ class KAN(nn.Module):
                 If True, simplify the equation at each step (usually quite slow), so set up False by default.
             output_normalizer: [mean array (floats), varaince array (floats)]
                 the normalization applied to outputs
-            
+
         Returns:
         --------
             symbolic formula : sympy function
-        
+
         Example
         -------
-        >>> model = KAN(width=[2,5,1], grid=5, k=3, noise_scale=0.1, seed=0, grid_eps=0.02)
-        >>> f = lambda x: torch.exp(torch.sin(torch.pi*x[:,[0]]) + x[:,[1]]**2)
-        >>> dataset = create_dataset(f, n_var=2)
-        >>> model.train(dataset, opt='LBFGS', steps=50, lamb=0.01);
-        >>> model = model.prune()
-        >>> model(dataset['train_input'])
-        >>> model.auto_symbolic(lib=['exp','sin','x^2'])
-        >>> model.train(dataset, opt='LBFGS', steps=50, lamb=0.00, update_grid=False);
-        >>> model.symbolic_formula()
-        '''
+        # >>> model = KAN(width=[2,5,1], grid=5, k=3, noise_scale=0.1, seed=0, grid_eps=0.02)
+        # >>> f = lambda x: torch.exp(torch.sin(torch.pi*x[:,[0]]) + x[:,[1]]**2)
+        # >>> dataset = create_dataset(f, n_var=2)
+        # >>> model.train(dataset, opt='LBFGS', steps=50, lamb=0.01);
+        # >>> model = model.prune()
+        # >>> model(dataset['train_input'])
+        # >>> model.auto_symbolic(lib=['exp','sin','x^2'])
+        # >>> model.train(dataset, opt='LBFGS', steps=50, lamb=0.00, update_grid=False);
+        # >>> model.symbolic_formula()
+        """
         symbolic_acts = []
         x = []
 
@@ -1212,7 +1258,7 @@ class KAN(nn.Module):
 
         x0 = x
 
-        if normalizer != None:
+        if normalizer is not None:
             mean = normalizer[0]
             std = normalizer[1]
             x = [(x[i] - mean[i]) / std[i] for i in range(len(x))]
@@ -1231,7 +1277,7 @@ class KAN(nn.Module):
                     except:
                         print('make sure all activations need to be converted to symbolic formulas first!')
                         return
-                if simplify == True:
+                if simplify:
                     y.append(sympy.simplify(yj + self.biases[l].weight.data[0, j]))
                 else:
                     y.append(yj + self.biases[l].weight.data[0, j])
@@ -1239,37 +1285,36 @@ class KAN(nn.Module):
             x = y
             symbolic_acts.append(x)
 
-        if output_normalizer != None:
+        if output_normalizer is not None:
             output_layer = symbolic_acts[-1]
             means = output_normalizer[0]
             stds = output_normalizer[1]
 
             assert len(output_layer) == len(means), 'output_normalizer does not match the output layer'
             assert len(output_layer) == len(stds), 'output_normalizer does not match the output layer'
-            
+
             output_layer = [(output_layer[i] * stds[i] + means[i]) for i in range(len(output_layer))]
             symbolic_acts[-1] = output_layer
 
-
-
-        self.symbolic_acts = [[ex_round(symbolic_acts[l][i]) for i in range(len(symbolic_acts[l]))] for l in range(len(symbolic_acts))]
+        self.symbolic_acts = [[ex_round(symbolic_acts[l][i]) for i in range(len(symbolic_acts[l]))] for l in
+                              range(len(symbolic_acts))]
 
         out_dim = len(symbolic_acts[-1])
         return [ex_round(symbolic_acts[-1][i]) for i in range(len(symbolic_acts[-1]))], x0
 
     def clear_ckpts(self, folder='./model_ckpt'):
-        '''
+        """
         clear all checkpoints
-        
+
         Args:
         -----
             folder : str
                 the folder that stores checkpoints
-        
+
         Returns:
         --------
             None
-        '''
+        """
         if os.path.exists(folder):
             files = glob.glob(folder + '/*')
             for f in files:
@@ -1278,20 +1323,20 @@ class KAN(nn.Module):
             os.makedirs(folder)
 
     def save_ckpt(self, name, folder='./model_ckpt'):
-        '''
+        """
         save the current model as checkpoint
-        
+
         Args:
         -----
             name: str
                 the name of the checkpoint to be saved
             folder : str
                 the folder that stores checkpoints
-               
+
         Returns:
         --------
             None
-        '''
+        """
 
         if not os.path.exists(folder):
             os.makedirs(folder)
@@ -1300,18 +1345,18 @@ class KAN(nn.Module):
         print('save this model to', folder + '/' + name)
 
     def load_ckpt(self, name, folder='./model_ckpt'):
-        '''
+        """
         load a checkpoint to the current model
-        
+
         Args:
         -----
             name: str
                 the name of the checkpoint to be loaded
             folder : str
                 the folder that stores checkpoints
-               
+
         Returns:
         --------
             None
-        '''
+        """
         self.load_state_dict(torch.load(folder + '/' + name))
