@@ -326,7 +326,7 @@ class KAN(nn.Module):
 
             x_numerical, preacts, postacts_numerical, postspline = self.act_fun[l](x)
 
-            if self.symbolic_enabled == True:
+            if self.symbolic_enabled:
                 x_symbolic, postacts_symbolic = self.symbolic_fun[l](x)
             else:
                 x_symbolic = 0.
@@ -372,19 +372,19 @@ class KAN(nn.Module):
             None
         """
         if mode == "s":
-            mask_n = 0.;
+            mask_n = 0.
             mask_s = 1.
         elif mode == "n":
-            mask_n = 1.;
+            mask_n = 1.
             mask_s = 0.
         elif mode == "sn" or mode == "ns":
-            if mask_n == None:
+            if mask_n is None:
                 mask_n = 1.
             else:
                 mask_n = mask_n
             mask_s = 1.
         else:
-            mask_n = 0.;
+            mask_n = 0.
             mask_s = 0.
 
         self.act_fun[l].mask.data[j * self.act_fun[l].in_dim + i] = mask_n
@@ -414,7 +414,7 @@ class KAN(nn.Module):
             verbose : bool
                 If True, more information is printed.
             random : bool
-                initialize affine parameteres randomly or as [1,0,1,0]
+                initialize affine parameters randomly or as [1,0,1,0]
 
         Returns:
         --------
@@ -642,7 +642,7 @@ class KAN(nn.Module):
                         color = "white"
                         alpha_mask = 0
 
-                    if tick == True:
+                    if tick:
                         ax.tick_params(axis="y", direction="in", pad=-22, labelsize=50)
                         ax.tick_params(axis="x", direction="in", pad=-15, labelsize=50)
                         x_min, x_max, y_min, y_max = self.get_range(l, i, j, verbose=False)
@@ -660,7 +660,7 @@ class KAN(nn.Module):
 
                     plt.plot(self.acts[l][:, i][rank].cpu().detach().numpy(),
                              self.spline_postacts[l][:, j, i][rank].cpu().detach().numpy(), color=color, lw=5)
-                    if sample == True:
+                    if sample:
                         plt.scatter(self.acts[l][:, i][rank].cpu().detach().numpy(),
                                     self.spline_postacts[l][:, j, i][rank].cpu().detach().numpy(), color=color,
                                     s=400 * scale ** 2)
@@ -860,7 +860,6 @@ class KAN(nn.Module):
         """
 
         def reg(acts_scale):
-
             def nonlinear(x, th=small_mag_threshold, factor=small_reg_factor):
                 return (x < th) * x * factor + (x > th) * (x + (factor - 1) * th)
 
@@ -881,8 +880,10 @@ class KAN(nn.Module):
 
             return reg_
 
+        # initialize progress bar with tqdm
         pbar = tqdm(range(steps), desc='description', ncols=100)
 
+        # specify loss function for training
         if loss_fn is None:
             loss_fn = loss_fn_eval = lambda x, y: torch.mean((x - y) ** 2)
         else:
@@ -890,6 +891,7 @@ class KAN(nn.Module):
 
         grid_update_freq = int(stop_grid_update_step / grid_update_num)
 
+        # specify optimizer for training
         if opt == "Adam":
             optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         elif opt == "LBFGS":
@@ -897,10 +899,12 @@ class KAN(nn.Module):
                               tolerance_grad=1e-32, tolerance_change=1e-32, tolerance_ys=1e-32)
 
         results = {'train_loss': [], 'test_loss': [], 'reg': []}
+
         if metrics is not None:
             for i in range(len(metrics)):
                 results[metrics[i].__name__] = []
 
+        # specify batch size for training
         if batch == -1 or batch > dataset['train_input'].shape[0]:
             batch_size = dataset['train_input'].shape[0]
             batch_size_test = dataset['test_input'].shape[0]
@@ -915,7 +919,7 @@ class KAN(nn.Module):
             optimizer.zero_grad()
             pred = self.forward(dataset['train_input'][train_id].to(device))
             if sglr_avoid:
-                id_ = torch.where(torch.isnan(torch.sum(pred, dim=1)) == False)[0]
+                id_ = torch.where(~torch.isnan(torch.sum(pred, dim=1)))[0]
                 train_loss = loss_fn(pred[id_], dataset['train_label'][train_id][id_].to(device))
             else:
                 train_loss = loss_fn(pred, dataset['train_label'][train_id].to(device))
@@ -928,8 +932,9 @@ class KAN(nn.Module):
             if not os.path.exists(img_folder):
                 os.makedirs(img_folder)
 
+        # training process
         for _ in pbar:
-
+            # randomly sample from training and testing data with batch size
             train_id = np.random.choice(dataset['train_input'].shape[0], batch_size, replace=False)
             test_id = np.random.choice(dataset['test_input'].shape[0], batch_size_test, replace=False)
 
@@ -942,7 +947,7 @@ class KAN(nn.Module):
             if opt == "Adam":
                 pred = self.forward(dataset['train_input'][train_id].to(device))
                 if sglr_avoid:
-                    id_ = torch.where(torch.isnan(torch.sum(pred, dim=1)) == False)[0]
+                    id_ = torch.where(~torch.isnan(torch.sum(pred, dim=1)))[0]
                     train_loss = loss_fn(pred[id_], dataset['train_label'][train_id][id_].to(device))
                 else:
                     train_loss = loss_fn(pred, dataset['train_label'][train_id].to(device))
@@ -952,13 +957,17 @@ class KAN(nn.Module):
                 loss.backward()
                 optimizer.step()
 
-            test_loss = loss_fn_eval(self.forward(dataset['test_input'][test_id].to(device)),
-                                     dataset['test_label'][test_id].to(device))
+            # evaluate model performance on testing data
+            test_loss = loss_fn_eval(
+                self.forward(dataset['test_input'][test_id].to(device)),
+                dataset['test_label'][test_id].to(device))
 
             if _ % log == 0:
-                pbar.set_description("train loss: %.2e | test loss: %.2e | reg: %.2e " % (
-                    torch.sqrt(train_loss).cpu().detach().numpy(), torch.sqrt(test_loss).cpu().detach().numpy(),
-                    reg_.cpu().detach().numpy()))
+                pbar.set_description(
+                    "train loss: %.2e | test loss: %.2e | reg: %.2e " % (
+                        torch.sqrt(train_loss).cpu().detach().numpy(),
+                        torch.sqrt(test_loss).cpu().detach().numpy(),
+                        reg_.cpu().detach().numpy()))
 
             if metrics is not None:
                 for i in range(len(metrics)):
