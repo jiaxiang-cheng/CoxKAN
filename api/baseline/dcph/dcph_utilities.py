@@ -53,9 +53,7 @@ def train_step(model, x, t, e, optimizer, bs=256, seed=100):
         # Training Step
         torch.enable_grad()
         optimizer.zero_grad()
-        loss = partial_ll_loss(model(xb),
-                               _reshape_tensor_with_nans(tb),
-                               _reshape_tensor_with_nans(eb))
+        loss = partial_ll_loss(model(xb), _reshape_tensor_with_nans(tb), _reshape_tensor_with_nans(eb))
         loss.backward()
         optimizer.step()
 
@@ -88,13 +86,13 @@ def train_dcph(model, train_data, val_data, epochs=50,
     tv_ = _reshape_tensor_with_nans(tv)
     ev_ = _reshape_tensor_with_nans(ev)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    # optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     optimizer = get_optimizer(model, lr)
 
     valc = np.inf
     patience_ = 0
 
-    breslow_spline = None
+    # breslow_spline = None
 
     losses = []
     dics = []
@@ -130,7 +128,7 @@ def train_dcph(model, train_data, val_data, epochs=50,
             if return_losses:
                 return (model, breslow_spline), losses
             else:
-                return (model, breslow_spline)
+                return model, breslow_spline
 
         valc = valcn
 
@@ -142,7 +140,7 @@ def train_dcph(model, train_data, val_data, epochs=50,
     if return_losses:
         return (model, breslow_spline), losses
     else:
-        return (model, breslow_spline)
+        return model, breslow_spline
 
 
 def predict_survival(model, x, t=None):
@@ -171,4 +169,5 @@ def __interpolate_missing_times(survival_predictions, times):
 
     for idx in not_in_index:
         survival_predictions.loc[idx] = nans
+
     return survival_predictions.sort_index(axis=0).interpolate(method='bfill').T[times].values
