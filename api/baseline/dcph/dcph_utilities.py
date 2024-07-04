@@ -32,8 +32,7 @@ def partial_ll_loss(lrisks, tb, eb, eps=1e-3):
 
 
 def fit_breslow(model, x, t, e):
-    return BreslowEstimator().fit(model(x).detach().cpu().numpy(),
-                                  e.numpy(), t.numpy())
+    return BreslowEstimator().fit(model(x).detach().cpu().numpy(), e.numpy(), t.numpy())
 
 
 def train_step(model, x, t, e, optimizer, bs=256, seed=100):
@@ -69,9 +68,9 @@ def test_step(model, x, t, e):
     return loss / x.shape[0]
 
 
-def train_dcph(model, train_data, val_data, epochs=50,
-               patience=3, bs=256, lr=1e-3, debug=False,
-               random_seed=0, return_losses=False):
+def train_dcph(model, train_data, val_data, epochs=50, patience=3, bs=256, lr=1e-3,
+               debug=False, random_seed=0, return_losses=False):
+
     torch.manual_seed(random_seed)
     np.random.seed(random_seed)
 
