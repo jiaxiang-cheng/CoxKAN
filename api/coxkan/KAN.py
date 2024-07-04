@@ -1,6 +1,9 @@
+import pandas as pd
 import torch
 import torch.nn as nn
 import numpy as np
+from sksurv.linear_model.coxph import BreslowEstimator
+
 from .KANLayer import *
 from .SymbolicKANLayer import *
 from .LBFGS import *
@@ -10,8 +13,61 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import random
 import copy
+from api.baseline.dsm.utilities import _reshape_tensor_with_nans
 
 RESOURCE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "figures")
+
+
+def fit_breslow(output, data):
+    return BreslowEstimator().fit(output, data['train_event'].numpy(), data['train_time'].numpy())
+
+
+def partial_ll_loss(lrisks, tb, eb, eps=1e-3):
+    tb = tb + eps * np.random.random(len(tb))
+    sindex = np.argsort(-tb)
+
+    tb = tb[sindex]
+    eb = eb[sindex]
+
+    lrisks = lrisks[sindex]
+    lrisksdenom = torch.logcumsumexp(lrisks, dim=0)
+
+    plls = lrisks - lrisksdenom
+    pll = plls[eb == 1]
+
+    pll = torch.sum(pll)
+
+    return -pll
+
+
+def predict_survival(lrisks, breslow_spline, t):
+    # if isinstance(t, (int, float)):
+    #     t = [t]
+
+    # lrisks = model(x).detach().cpu().numpy()
+
+    unique_times = breslow_spline.baseline_survival_.x
+
+    raw_predictions = breslow_spline.get_survival_function(lrisks)
+    raw_predictions = np.array([pred.y for pred in raw_predictions])
+
+    predictions = pd.DataFrame(data=raw_predictions, columns=unique_times)
+
+    if t is None:
+        return predictions
+    else:
+        return __interpolate_missing_times(predictions.T, t)
+        # return np.array(predictions).T
+
+
+def __interpolate_missing_times(survival_predictions, times):
+    nans = np.full(survival_predictions.shape[1], np.nan)
+    not_in_index = list(set(times) - set(survival_predictions.index))
+
+    for idx in not_in_index:
+        survival_predictions.loc[idx] = nans
+
+    return survival_predictions.sort_index(axis=0).interpolate(method='bfill').T[times].values
 
 
 class KAN(nn.Module):
@@ -137,8 +193,7 @@ class KAN(nn.Module):
         np.random.seed(seed)
         random.seed(seed)
 
-        ### initializeing the numerical front ###
-
+        # initializing the numerical front
         self.biases = []
         self.act_fun = []
         self.depth = len(width) - 1
@@ -166,7 +221,7 @@ class KAN(nn.Module):
         self.k = k
         self.base_fun = base_fun
 
-        ### initializing the symbolic front ###
+        # initializing the symbolic front
         self.symbolic_fun = []
         for l in range(self.depth):
             sb_batch = SymbolicKANLayer(in_dim=width[l], out_dim=width[l + 1], device=device)
@@ -203,6 +258,7 @@ class KAN(nn.Module):
         tensor(-0.0030)
         tensor(0.0506)
         """
+
         another_model(x.to(another_model.device))  # get activations
         batch = x.shape[0]
 
@@ -651,6 +707,7 @@ class KAN(nn.Module):
                     else:
                         plt.xticks([])
                         plt.yticks([])
+
                     if alpha_mask == 1:
                         plt.gca().patch.set_edgecolor('black')
                     else:
@@ -797,9 +854,9 @@ class KAN(nn.Module):
             plt.gcf().get_axes()[0].text(0.5, y0 * (len(self.width) - 1) + 0.2, title, fontsize=40 * scale,
                                          horizontalalignment='center', verticalalignment='center')
 
-    def fit(self, dataset, opt="LBFGS", steps=100, log=1, lamb=0., lamb_l1=1., lamb_entropy=2., lamb_coef=0.,
+    def fit(self, dataset, opt="Adam", steps=100, log=1, lamb=0., lamb_l1=1., lamb_entropy=2., lamb_coef=0.,
             lamb_coefdiff=0., update_grid=True, grid_update_num=10, loss_fn=None, lr=1., stop_grid_update_step=50,
-            batch=-1, small_mag_threshold=1e-16, small_reg_factor=1., metrics=None, sglr_avoid=False, save_fig=False,
+            batch=256, small_mag_threshold=1e-16, small_reg_factor=1., metrics=None, sglr_avoid=False, save_fig=False,
             in_vars=None, out_vars=None, beta=3, save_fig_freq=1, img_folder='./video', device='cpu'):
         """
         training
@@ -859,7 +916,7 @@ class KAN(nn.Module):
         # >>> model.plot()
         """
 
-        def reg(acts_scale):
+        def reg(acts_scale):  # regularization
             def nonlinear(x, th=small_mag_threshold, factor=small_reg_factor):
                 return (x < th) * x * factor + (x > th) * (x + (factor - 1) * th)
 
@@ -907,10 +964,10 @@ class KAN(nn.Module):
         # specify batch size for training
         if batch == -1 or batch > dataset['train_input'].shape[0]:
             batch_size = dataset['train_input'].shape[0]
-            batch_size_test = dataset['test_input'].shape[0]
+            # batch_size_test = dataset['test_input'].shape[0]
         else:
             batch_size = batch
-            batch_size_test = batch
+            # batch_size_test = batch
 
         global train_loss, reg_
 
@@ -918,14 +975,21 @@ class KAN(nn.Module):
             global train_loss, reg_
             optimizer.zero_grad()
             pred = self.forward(dataset['train_input'][train_id].to(device))
-            if sglr_avoid:
+
+            # calculate regression loss
+            if sglr_avoid:  # avoid instances with nan predicted
                 id_ = torch.where(~torch.isnan(torch.sum(pred, dim=1)))[0]
                 train_loss = loss_fn(pred[id_], dataset['train_label'][train_id][id_].to(device))
             else:
                 train_loss = loss_fn(pred, dataset['train_label'][train_id].to(device))
+
+            # calculate regularization loss
             reg_ = reg(self.acts_scale)
+
+            # backpropagation
             objective = train_loss + lamb * reg_
             objective.backward()
+
             return objective
 
         if save_fig:
@@ -936,7 +1000,11 @@ class KAN(nn.Module):
         for _ in pbar:
             # randomly sample from training and testing data with batch size
             train_id = np.random.choice(dataset['train_input'].shape[0], batch_size, replace=False)
-            test_id = np.random.choice(dataset['test_input'].shape[0], batch_size_test, replace=False)
+            # test_id = np.random.choice(dataset['test_input'].shape[0], batch_size_test, replace=False)
+
+            xb = dataset['train_input'][train_id].to(device)
+            tb = dataset['train_time'][train_id].to(device)
+            eb = dataset['train_event'][train_id].to(device)
 
             if _ % grid_update_freq == 0 and _ < stop_grid_update_step and update_grid:
                 self.update_grid_from_samples(dataset['train_input'][train_id].to(device))
@@ -945,36 +1013,41 @@ class KAN(nn.Module):
                 optimizer.step(closure)
 
             if opt == "Adam":
-                pred = self.forward(dataset['train_input'][train_id].to(device))
+                pred = self.forward(xb)
                 if sglr_avoid:
                     id_ = torch.where(~torch.isnan(torch.sum(pred, dim=1)))[0]
-                    train_loss = loss_fn(pred[id_], dataset['train_label'][train_id][id_].to(device))
+                    # train_loss = loss_fn(pred[id_], dataset['train_label'][train_id][id_].to(device))
+                    train_loss = partial_ll_loss(pred, _reshape_tensor_with_nans(tb), _reshape_tensor_with_nans(eb))
                 else:
-                    train_loss = loss_fn(pred, dataset['train_label'][train_id].to(device))
+                    # train_loss = loss_fn(pred, dataset['train_label'][train_id].to(device))
+                    train_loss = partial_ll_loss(pred, _reshape_tensor_with_nans(tb), _reshape_tensor_with_nans(eb))
                 reg_ = reg(self.acts_scale)
                 loss = train_loss + lamb * reg_
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
 
-            # evaluate model performance on testing data
-            test_loss = loss_fn_eval(
-                self.forward(dataset['test_input'][test_id].to(device)),
-                dataset['test_label'][test_id].to(device))
+            # # evaluate model performance on testing data
+            # test_loss = loss_fn_eval(
+            #     self.forward(dataset['test_input'][test_id].to(device)),
+            #     dataset['test_label'][test_id].to(device))
 
             if _ % log == 0:
+                # pbar.set_description(
+                #     "train loss: %.2e | test loss: %.2e | reg: %.2e " % (
+                #         torch.sqrt(train_loss).cpu().detach().numpy(),
+                #         torch.sqrt(test_loss).cpu().detach().numpy(),
+                #         reg_.cpu().detach().numpy()))
                 pbar.set_description(
-                    "train loss: %.2e | test loss: %.2e | reg: %.2e " % (
-                        torch.sqrt(train_loss).cpu().detach().numpy(),
-                        torch.sqrt(test_loss).cpu().detach().numpy(),
-                        reg_.cpu().detach().numpy()))
+                    "train loss: %.2e | reg: %.2e " % (
+                        torch.sqrt(train_loss).cpu().detach().numpy(), reg_.cpu().detach().numpy()))
 
             if metrics is not None:
                 for i in range(len(metrics)):
                     results[metrics[i].__name__].append(metrics[i]().item())
 
             results['train_loss'].append(torch.sqrt(train_loss).cpu().detach().numpy())
-            results['test_loss'].append(torch.sqrt(test_loss).cpu().detach().numpy())
+            # results['test_loss'].append(torch.sqrt(test_loss).cpu().detach().numpy())
             results['reg'].append(reg_.cpu().detach().numpy())
 
             if save_fig and _ % save_fig_freq == 0:
@@ -982,7 +1055,55 @@ class KAN(nn.Module):
                 plt.savefig(img_folder + '/' + str(_) + '.jpg', bbox_inches='tight', dpi=200)
                 plt.close()
 
+        self.fitted = True
+
         return results
+
+    def predict_risk(self, dataset, t):
+
+        if self.fitted:
+            return 1 - self.predict_survival(dataset, t)
+        else:
+            raise Exception("The model has not been fitted yet. Please fit the " +
+                            "model using the `fit` method on some training data " +
+                            "before calling `predict_risk`.")
+
+    def predict_survival(self, dataset, t):
+        """
+        Returns the estimated survival probability at time \( t \),
+        \( \widehat{\mathbb{P}}(T > t|X) \) for some input data \( x \).
+
+        Parameters
+        ----------
+        x: np.ndarray
+            A numpy array of the input features, \( x \).
+        t: list or float
+            a list or float of the times at which survival probability is
+            to be computed
+        Args:
+          dataset: for prediction
+
+        Returns:
+          np.array: numpy array of the survival probabilites at each time in t.
+
+        """
+        if not self.fitted:
+            raise Exception("The model has not been fitted yet. Please fit the " +
+                            "model using the `fit` method on some training data " +
+                            "before calling `predict_survival`.")
+
+        # x = self._preprocess_test_data(x)
+
+        # if t is not None:
+        #     if not isinstance(t, list):
+        #         t = [t]
+
+        from sksurv.linear_model.coxph import BreslowEstimator
+
+        breslow_spline = fit_breslow(self.forward(dataset['train_input']).detach().cpu().numpy(), dataset)
+        lrisks = self.forward(dataset['test_input']).detach().cpu().numpy()
+        scores = predict_survival(lrisks, breslow_spline, t)
+        return scores
 
     def prune(self, threshold=1e-2, mode="auto", active_neurons_id=None):
         """
