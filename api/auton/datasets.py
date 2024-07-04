@@ -106,30 +106,30 @@ def _load_framingham_dataset(sequential):
 
 
 def _load_pbc_dataset(sequential):
-    """Helper function to load and preprocess the PBC dataset
-  The Primary biliary cirrhosis (PBC) Dataset [1] is well known
-  dataset for evaluating survival analysis models with time
-  dependent covariates.
-  Parameters
-  ----------
-  sequential: bool
-    If True returns a list of np.arrays for each individual.
-    else, returns collapsed results for each time step. To train
-    recurrent neural models you would typically use True.
-  References
-  ----------
-  [1] Fleming, Thomas R., and David P. Harrington. Counting processes and
-  survival analysis. Vol. 169. John Wiley & Sons, 2011.
-  """
+    """
+    Helper function to load and preprocess the PBC dataset
+
+    The Primary biliary cirrhosis (PBC) Dataset [1] is well known
+    dataset for evaluating survival analysis models with time
+    dependent covariates.
+    Parameters
+    ----------
+    sequential: bool
+      If True returns a list of np.arrays for each individual.
+      else, returns collapsed results for each time step. To train
+      recurrent neural models you would typically use True.
+    References
+    ----------
+    [1] Fleming, Thomas R., and David P. Harrington. Counting processes and
+    survival analysis. Vol. 169. John Wiley & Sons, 2011.
+    """
 
     data = pkgutil.get_data(__name__, 'datasets/pbc2.csv')
     data = pd.read_csv(io.BytesIO(data))
 
     data['histologic'] = data['histologic'].astype(str)
-    dat_cat = data[['drug', 'sex', 'ascites', 'hepatomegaly',
-                    'spiders', 'edema', 'histologic']]
-    dat_num = data[['serBilir', 'serChol', 'albumin', 'alkaline',
-                    'SGOT', 'platelets', 'prothrombin']]
+    dat_cat = data[['drug', 'sex', 'ascites', 'hepatomegaly', 'spiders', 'edema', 'histologic']]
+    dat_num = data[['serBilir', 'serChol', 'albumin', 'alkaline', 'SGOT', 'platelets', 'prothrombin']]
     age = data['age'] + data['years']
 
     x1 = pd.get_dummies(dat_cat).values
@@ -181,9 +181,9 @@ def load_support():
     outcomes = outcomes[['event', 'time']]
 
     cat_feats = ['sex', 'dzgroup', 'dzclass', 'income', 'race', 'ca']
-    num_feats = [
-      'age', 'num.co', 'meanbp', 'wblc', 'hrt', 'resp', 'temp', 'pafi', 'alb', 'bili', 'crea',
-      'sod', 'ph', 'glucose', 'bun', 'urine', 'adlp', 'adls']
+    num_feats = ['age', 'num.co', 'meanbp', 'wblc', 'hrt', 'resp',
+                 'temp', 'pafi', 'alb', 'bili', 'crea', 'sod', 'ph',
+                 'glucose', 'bun', 'urine', 'adlp', 'adls']
 
     return outcomes, data[cat_feats + num_feats]
 
@@ -261,51 +261,54 @@ def load_synthetic_cf_phenotyping():
 
 
 def load_dataset(dataset='SUPPORT', **kwargs):
-    """Helper function to load datasets to test Survival Analysis models.
-  Currently implemented datasets include:\n
-  **SUPPORT**: This dataset comes from the Vanderbilt University study
-  to estimate survival for seriously ill hospitalized adults [1].
-  (Refer to http://biostat.mc.vanderbilt.edu/wiki/Main/SupportDesc.
-  for the original datasource.)\n
-  **PBC**: The Primary biliary cirrhosis dataset [2] is well known
-  dataset for evaluating survival analysis models with time
-  dependent covariates.\n
-  **FRAMINGHAM**: This dataset is a subset of 4,434 participants of the well
-  known, ongoing Framingham Heart study [3] for studying epidemiology for
-  hypertensive and arteriosclerotic cardiovascular disease. It is a popular
-  dataset for longitudinal survival analysis with time dependent covariates.\n
-  **SYNTHETIC**: This is a non-linear censored dataset for counterfactual
-  time-to-event phenotyping. Introduced in [4], the dataset is generated
-  such that the treatment effect is heterogenous conditioned on the covariates.
+    """
+    Helper function to load datasets to test Survival Analysis models.
 
-  References
-  -----------
-  [1]: Knaus WA, Harrell FE, Lynn J et al. (1995): The SUPPORT prognostic
-  model: Objective estimates of survival for seriously ill hospitalized
-  adults. Annals of Internal Medicine 122:191-203.\n
-  [2] Fleming, Thomas R., and David P. Harrington. Counting processes and
-  survival analysis. Vol. 169. John Wiley & Sons, 2011.\n
-  [3] Dawber, Thomas R., Gilcin F. Meadors, and Felix E. Moore Jr.
-  "Epidemiological approaches to heart disease: the Framingham Study."
-  American Journal of Public Health and the Nations Health 41.3 (1951).\n
-  [4] Nagpal, C., Goswami M., Dufendach K., and Artur Dubrawski.
-  "Counterfactual phenotyping for censored Time-to-Events" (2022).
+    Currently implemented datasets include:\n
+    **SUPPORT**: This dataset comes from the Vanderbilt University study
+    to estimate survival for seriously ill hospitalized adults [1].
+    (Refer to http://biostat.mc.vanderbilt.edu/wiki/Main/SupportDesc.
+    for the original datasource.)\n
+    **PBC**: The Primary biliary cirrhosis dataset [2] is well known
+    dataset for evaluating survival analysis models with time
+    dependent covariates.\n
+    **FRAMINGHAM**: This dataset is a subset of 4,434 participants of the well
+    known, ongoing Framingham Heart study [3] for studying epidemiology for
+    hypertensive and arteriosclerotic cardiovascular disease. It is a popular
+    dataset for longitudinal survival analysis with time dependent covariates.\n
+    **SYNTHETIC**: This is a non-linear censored dataset for counterfactual
+    time-to-event phenotyping. Introduced in [4], the dataset is generated
+    such that the treatment effect is heterogenous conditioned on the covariates.
 
-  Parameters
-  ----------
-  dataset: str
-      The choice of dataset to load. Currently implemented is 'SUPPORT',
-      'PBC' and 'FRAMINGHAM'.
-  **kwargs: dict
-      Dataset specific keyword arguments.
+    References
+    -----------
+    [1]: Knaus WA, Harrell FE, Lynn J et al. (1995): The SUPPORT prognostic
+    model: Objective estimates of survival for seriously ill hospitalized
+    adults. Annals of Internal Medicine 122:191-203.\n
+    [2] Fleming, Thomas R., and David P. Harrington. Counting processes and
+    survival analysis. Vol. 169. John Wiley & Sons, 2011.\n
+    [3] Dawber, Thomas R., Gilcin F. Meadors, and Felix E. Moore Jr.
+    "Epidemiological approaches to heart disease: the Framingham Study."
+    American Journal of Public Health and the Nations Health 41.3 (1951).\n
+    [4] Nagpal, C., Goswami M., Dufendach K., and Artur Dubrawski.
+    "Counterfactual phenotyping for censored Time-to-Events" (2022).
 
-  Returns
-  ----------
-  tuple: (np.ndarray, np.ndarray, np.ndarray)
-      A tuple of the form of \( (x, t, e) \) where \( x \)
-      are the input covariates, \( t \) the event times and
-      \( e \) the censoring indicators.
-  """
+    Parameters
+    ----------
+    dataset: str
+        The choice of dataset to load. Currently implemented is 'SUPPORT',
+        'PBC' and 'FRAMINGHAM'.
+    **kwargs: dict
+        Dataset specific keyword arguments.
+
+    Returns
+    ----------
+    tuple: (np.ndarray, np.ndarray, np.ndarray)
+        A tuple of the form of \( (x, t, e) \) where \( x \)
+        are the input covariates, \( t \) the event times and
+        \( e \) the censoring indicators.
+    """
+
     sequential = kwargs.get('sequential', False)
 
     if dataset == 'SUPPORT':
