@@ -28,7 +28,6 @@ def partial_ll_loss(lrisks, tb, eb, eps=1e-3):
 
     tb = tb[sindex]
     eb = eb[sindex]
-
     lrisks = lrisks[sindex]
     lrisksdenom = torch.logcumsumexp(lrisks, dim=0)
 
@@ -979,9 +978,11 @@ class KAN(nn.Module):
             # calculate regression loss
             if sglr_avoid:  # avoid instances with nan predicted
                 id_ = torch.where(~torch.isnan(torch.sum(pred, dim=1)))[0]
-                train_loss = loss_fn(pred[id_], dataset['train_label'][train_id][id_].to(device))
+                # train_loss = loss_fn(pred[id_], dataset['train_label'][train_id][id_].to(device))
+                train_loss = partial_ll_loss(pred, _reshape_tensor_with_nans(tb), _reshape_tensor_with_nans(eb))
             else:
-                train_loss = loss_fn(pred, dataset['train_label'][train_id].to(device))
+                # train_loss = loss_fn(pred, dataset['train_label'][train_id].to(device))
+                train_loss = partial_ll_loss(pred, _reshape_tensor_with_nans(tb), _reshape_tensor_with_nans(eb))
 
             # calculate regularization loss
             reg_ = reg(self.acts_scale)
@@ -1138,16 +1139,20 @@ class KAN(nn.Module):
         """
         mask = [torch.ones(self.width[0], )]
         active_neurons = [list(range(self.width[0]))]
+
         for i in range(len(self.acts_scale) - 1):
             if mode == "auto":
+                print(torch.max(self.acts_scale[i], dim=1)[0])
                 in_important = torch.max(self.acts_scale[i], dim=1)[0] > threshold
                 out_important = torch.max(self.acts_scale[i + 1], dim=0)[0] > threshold
                 overall_important = in_important * out_important
             elif mode == "manual":
                 overall_important = torch.zeros(self.width[i + 1], dtype=torch.bool)
                 overall_important[active_neurons_id[i + 1]] = True
+
             mask.append(overall_important.float())
-            active_neurons.append(torch.where(overall_important == True)[0])
+            active_neurons.append(torch.where(overall_important)[0])
+
         active_neurons.append(list(range(self.width[-1])))
         mask.append(torch.ones(self.width[-1], ))
 
