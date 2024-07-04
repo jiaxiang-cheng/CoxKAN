@@ -134,13 +134,9 @@ class DeepCoxPH:
         np.random.seed(self.random_seed)
         torch.manual_seed(self.random_seed)
 
-        return DeepCoxPHTorch(inputdim, layers=self.layers,
-                              optimizer=optimizer)
+        return DeepCoxPHTorch(inputdim, layers=self.layers, optimizer=optimizer)
 
-    def fit(self, x, t, e, vsize=0.15, val_data=None,
-            iters=1, learning_rate=1e-3, batch_size=100,
-            optimizer="Adam"):
-
+    def fit(self, x, t, e, vsize=0.15, val_data=None, iters=1, learning_rate=1e-3, batch_size=100, optimizer="Adam"):
         """
         This method is used to train an instance of the DSM model.
 
@@ -170,9 +166,7 @@ class DeepCoxPH:
 
         """
 
-        processed_data = self._preprocess_training_data(x, t, e,
-                                                        vsize, val_data,
-                                                        self.random_seed)
+        processed_data = self._preprocess_training_data(x, t, e, vsize, val_data, self.random_seed)
 
         x_train, t_train, e_train, x_val, t_val, e_val = processed_data
 
@@ -182,14 +176,9 @@ class DeepCoxPH:
 
         model = self._gen_torch_model(inputdim, optimizer)
 
-        model, _ = train_dcph(model,
-                              (x_train, t_train, e_train),
-                              (x_val, t_val, e_val),
-                              epochs=iters,
-                              lr=learning_rate,
-                              bs=batch_size,
-                              return_losses=True,
-                              random_seed=self.random_seed)
+        model, _ = train_dcph(
+            model, (x_train, t_train, e_train),(x_val, t_val, e_val),
+            epochs=iters, lr=learning_rate, bs=batch_size, return_losses=True, random_seed=self.random_seed)
 
         self.torch_model = (model[0].eval(), model[1])
         self.fitted = True
