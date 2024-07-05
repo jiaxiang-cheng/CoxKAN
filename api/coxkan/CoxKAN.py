@@ -1330,7 +1330,7 @@ class CoxKAN(nn.Module):
                         if verbose >= 1:
                             print(f'fixing ({l},{i},{j}) with {name}, r2={r2}')
 
-    def symbolic_formula(self, floating_digit=2, var=None, normalizer=None, simplify=False, output_normalizer=None):
+    def symbolic_formula(self, floating_digit=3, var=None, normalizer=None, simplify=False, output_normalizer=None):
         """
         obtain the symbolic formula
 
@@ -1374,7 +1374,7 @@ class CoxKAN(nn.Module):
             return ex2
 
         # define variables
-        if var == None:
+        if var is None:
             for ii in range(1, self.width[0] + 1):
                 exec(f"x{ii} = sympy.Symbol('x_{ii}')")
                 exec(f"x.append(x{ii})")
@@ -1399,6 +1399,7 @@ class CoxKAN(nn.Module):
                     sympy_fun = self.symbolic_fun[l].funs_sympy[j][i]
                     try:
                         yj += c * sympy_fun(a * x[i] + b) + d
+                        # print(yj)  # print the complete formula without simplification
                     except:
                         print('make sure all activations need to be converted to symbolic formulas first!')
                         return
@@ -1421,10 +1422,11 @@ class CoxKAN(nn.Module):
             output_layer = [(output_layer[i] * stds[i] + means[i]) for i in range(len(output_layer))]
             symbolic_acts[-1] = output_layer
 
-        self.symbolic_acts = [[ex_round(symbolic_acts[l][i]) for i in range(len(symbolic_acts[l]))] for l in
-                              range(len(symbolic_acts))]
+        self.symbolic_acts = [
+            [ex_round(symbolic_acts[l][i]) for i in range(len(symbolic_acts[l]))] for l in range(len(symbolic_acts))]
 
         out_dim = len(symbolic_acts[-1])
+
         return [ex_round(symbolic_acts[-1][i]) for i in range(len(symbolic_acts[-1]))], x0
 
     def clear_ckpts(self, folder='./model_ckpt'):
