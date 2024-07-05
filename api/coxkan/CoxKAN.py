@@ -14,6 +14,7 @@ from tqdm import tqdm
 import random
 import copy
 from api.baseline.dsm.utilities import _reshape_tensor_with_nans
+from api.auton.utils import _dataframe_to_array
 
 RESOURCE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "figures")
 
@@ -40,10 +41,9 @@ def partial_ll_loss(lrisks, tb, eb, eps=1e-3):
 
 
 def predict_survival(lrisks, breslow_spline, t):
-    # if isinstance(t, (int, float)):
-    #     t = [t]
-
     # lrisks = model(x).detach().cpu().numpy()
+    if isinstance(t, (int, float)):
+        t = [t]
 
     unique_times = breslow_spline.baseline_survival_.x
 
@@ -56,7 +56,6 @@ def predict_survival(lrisks, breslow_spline, t):
         return predictions
     else:
         return __interpolate_missing_times(predictions.T, t)
-        # return np.array(predictions).T
 
 
 def __interpolate_missing_times(survival_predictions, times):
@@ -71,7 +70,7 @@ def __interpolate_missing_times(survival_predictions, times):
 
 class CoxKAN(nn.Module):
     """
-    KAN class
+    CoxKAN Model
 
     Attributes:
     -----------
@@ -185,6 +184,7 @@ class CoxKAN(nn.Module):
         """
         super(CoxKAN, self).__init__()
 
+        self.breslow_spline = None
         self.fitted = None
 
         if grid_range is None:
@@ -957,7 +957,7 @@ class CoxKAN(nn.Module):
                 results[metrics[i].__name__] = []
 
         # specify batch size for training
-        if batch == -1 or batch > dataset['train_input'].shape[0]:
+        if batch == -1 or batch > dataset['val_input'].shape[0]:
             batch_size = dataset['train_input'].shape[0]
             batch_size_test = dataset['val_input'].shape[0]
         else:
@@ -1048,26 +1048,31 @@ class CoxKAN(nn.Module):
 
         self.fitted = True
 
+        self.breslow_spline = fit_breslow(self.forward(dataset['train_input']).detach().cpu().numpy(), dataset)
+
         return results
 
-    def predict_risk(self, dataset, t):
+    def _preprocess_test_data(self, x):
+        x = _dataframe_to_array(x)
+        return torch.from_numpy(x).float()
+
+    def predict_risk(self, x, t=None):
 
         if self.fitted:
-            return 1 - self.predict_survival(dataset, t)
+            return 1 - self.predict_survival(x, t)
         else:
             raise Exception("The model has not been fitted yet. Please fit the " +
                             "model using the `fit` method on some training data " +
                             "before calling `predict_risk`.")
 
-    def predict_survival(self, dataset, t):
+    def predict_survival(self, x, t=None):
         """
         Returns the estimated survival probability at time \( t \),
         \( \widehat{\mathbb{P}}(T > t|X) \) for some input data \( x \).
 
         Parameters
         ----------
-        x: np.ndarray
-            A numpy array of the input features, \( x \).
+        x: the input features, x.
         t: list or float
             a list or float of the times at which survival probability is
             to be computed
@@ -1085,15 +1090,12 @@ class CoxKAN(nn.Module):
 
         # x = self._preprocess_test_data(x)
 
-        # if t is not None:
-        #     if not isinstance(t, list):
-        #         t = [t]
+        if t is not None:
+            if not isinstance(t, list):
+                t = [t]
 
-        from sksurv.linear_model.coxph import BreslowEstimator
+        scores = predict_survival(self.forward(x).detach().cpu().numpy(), self.breslow_spline, t)
 
-        breslow_spline = fit_breslow(self.forward(dataset['train_input']).detach().cpu().numpy(), dataset)
-        lrisks = self.forward(dataset['test_input']).detach().cpu().numpy()
-        scores = predict_survival(lrisks, breslow_spline, t)
         return scores
 
     def prune(self, threshold=1e-2, mode="auto", active_neurons_id=None):

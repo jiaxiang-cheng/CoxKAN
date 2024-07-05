@@ -11,6 +11,7 @@ from sksurv.metrics import concordance_index_censored, concordance_index_ipcw, b
 
 sys.path.append('./')
 
+from api.coxkan import CoxKAN
 from api.auton import preprocessing
 from api.survset.data import SurvLoader
 from api.baseline.dsm import DeepSurvivalMachines
@@ -24,6 +25,7 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 parser = argparse.ArgumentParser()
 # parser.add_argument("--seed", type=int, dest="seed")
 parser.add_argument("--data", type=str, dest="data")
+parser.add_argument("--model", type=str, dest="model")
 args = parser.parse_args()
 
 random_state = 0
@@ -31,6 +33,8 @@ random_state = 0
 random.seed(random_state)
 np.random.seed(random_state)
 torch.random.manual_seed(random_state)
+
+device = 'cpu'
 
 
 def load_data(data=args.data):
@@ -68,27 +72,46 @@ if __name__ == '__main__':
     vl_size = int(n * 0.10)
     te_size = int(n * 0.20)
 
-    x_train, x_test, x_val = x[:tr_size], x[-te_size:], x[tr_size:tr_size+vl_size]
-    t_train, t_test, t_val = t[:tr_size], t[-te_size:], t[tr_size:tr_size+vl_size]
-    e_train, e_test, e_val = e[:tr_size], e[-te_size:], e[tr_size:tr_size+vl_size]
+    x_train, x_test, x_val = x[:tr_size], x[-te_size:], x[tr_size:tr_size + vl_size]
+    t_train, t_test, t_val = t[:tr_size], t[-te_size:], t[tr_size:tr_size + vl_size]
+    e_train, e_test, e_val = e[:tr_size], e[-te_size:], e[tr_size:tr_size + vl_size]
 
-    model = DeepCoxPH(layers=[100, 100])
-    # model = DeepCoxMixtures(layers=[100, 100])
+    if args.model == 'CoxKAN':
+        dataset = {
+            'train_input': torch.from_numpy(x_train).to(device),
+            'val_input': torch.from_numpy(x_val).to(device),
+            'test_input': torch.from_numpy(x_test).to(device),
+            'train_time': torch.from_numpy(t_train).to(device),
+            'val_time': torch.from_numpy(t_val).to(device),
+            'test_time': torch.from_numpy(t_test).to(device),
+            'train_event': torch.from_numpy(e_train).to(device),
+            'val_event': torch.from_numpy(e_val).to(device),
+            'test_event': torch.from_numpy(e_test).to(device)}
 
-    # The fit method is called to train the model
-    model.fit(x_train, t_train, e_train, iters=100, learning_rate=1e-4)
-    # model = DeepSurvivalMachines(layers=[100, 100])
+        optimizer = 'LBFGS'
+        lr = 0.001
 
-    # print(model.forward(torch.from_numpy(x_test).float()))
-    # pred = model.forward(torch.from_numpy(x_test).float()).detach().cpu().numpy().flatten()
-    # pred = model.predict_mean(x_test)
+        model = CoxKAN(width=[x_train.shape[1], 1], grid=5, k=3, seed=0)
+        model.fit(dataset, opt=optimizer, steps=20, lr=lr, lamb=0.01, lamb_entropy=10.)
 
-    # ci = concordance_index_censored(e_test != 0, t_test, pred)[0]
+        model.auto_symbolic(lib=['x', 'x^2', 'x^3', 'x^4', 'exp', 'log', 'sqrt', 'tanh'])
+        model.fit(dataset, opt=optimizer, lr=lr, steps=20)
+        print(model.symbolic_formula(floating_digit=3)[0][0])
 
-    # print(ci)
+        out_risk = model.predict_risk(dataset['test_input'], times)
+        out_survival = model.predict_survival(dataset['test_input'], times)
 
-    out_risk = model.predict_risk(x_test, times)
-    out_survival = model.predict_survival(x_test, times)
+    else:
+
+        model = DeepCoxPH(layers=[100, 100])
+        # model = DeepCoxMixtures(layers=[100, 100])
+
+        # The fit method is called to train the model
+        model.fit(x_train, t_train, e_train, iters=100, learning_rate=1e-4)
+        # model = DeepSurvivalMachines(layers=[100, 100])
+
+        out_risk = model.predict_risk(x_test, times)
+        out_survival = model.predict_survival(x_test, times)
 
     et_train = np.array([(e_train[i], t_train[i]) for i in range(len(e_train))], dtype=[('e', bool), ('t', float)])
     et_test = np.array([(e_test[i], t_test[i]) for i in range(len(e_test))], dtype=[('e', bool), ('t', float)])
