@@ -268,7 +268,7 @@ class LBFGS(Optimizer):
         offset = 0
         for p in self._params:
             numel = p.numel()
-            # view as to avoid deprecated pointwise semantics
+            # view as to avoid deprecated point-wise semantics
             p.add_(update[offset:offset + numel].view_as(p), alpha=step_size)
             offset += numel
         assert offset == self._numel()
@@ -289,7 +289,8 @@ class LBFGS(Optimizer):
 
     @torch.no_grad()
     def step(self, closure):
-        """Perform a single optimization step.
+        """
+        Perform a single optimization step.
 
         Args:
             closure (Callable): A closure that reevaluates the model

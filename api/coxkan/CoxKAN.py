@@ -69,7 +69,7 @@ def __interpolate_missing_times(survival_predictions, times):
     return survival_predictions.sort_index(axis=0).interpolate(method='bfill').T[times].values
 
 
-class KAN(nn.Module):
+class CoxKAN(nn.Module):
     """
     KAN class
 
@@ -150,7 +150,7 @@ class KAN(nn.Module):
             grid : int
                 number of grid intervals. Default: 3.
             k : int
-                order of piecewise polynomial. Default: 3.
+                order of piece-wise polynomial. Default: 3.
             noise_scale : float
                 initial injected noise to spline. Default: 0.1.
             base_fun : fun
@@ -183,7 +183,9 @@ class KAN(nn.Module):
         # >>> (model.act_fun[0].in_dim, model.act_fun[0].out_dim), (model.act_fun[1].in_dim, model.act_fun[1].out_dim)
         ((2, 5), (5, 1))
         """
-        super(KAN, self).__init__()
+        super(CoxKAN, self).__init__()
+
+        self.fitted = None
 
         if grid_range is None:
             grid_range = [-1, 1]
@@ -939,12 +941,6 @@ class KAN(nn.Module):
         # initialize progress bar with tqdm
         pbar = tqdm(range(steps), desc='description', ncols=100)
 
-        # specify loss function for training
-        if loss_fn is None:
-            loss_fn = loss_fn_eval = lambda x, y: torch.mean((x - y) ** 2)
-        else:
-            loss_fn = loss_fn_eval = loss_fn
-
         grid_update_freq = int(stop_grid_update_step / grid_update_num)
 
         # specify optimizer for training
@@ -954,7 +950,7 @@ class KAN(nn.Module):
             optimizer = LBFGS(self.parameters(), lr=lr, history_size=10, line_search_fn="strong_wolfe",
                               tolerance_grad=1e-32, tolerance_change=1e-32, tolerance_ys=1e-32)
 
-        results = {'train_loss': [], 'test_loss': [], 'reg': []}
+        results = {'train_loss': [], 'val_loss': [], 'reg': []}
 
         if metrics is not None:
             for i in range(len(metrics)):
@@ -963,26 +959,21 @@ class KAN(nn.Module):
         # specify batch size for training
         if batch == -1 or batch > dataset['train_input'].shape[0]:
             batch_size = dataset['train_input'].shape[0]
-            # batch_size_test = dataset['test_input'].shape[0]
+            batch_size_test = dataset['val_input'].shape[0]
         else:
             batch_size = batch
-            # batch_size_test = batch
+            batch_size_test = batch
 
         global train_loss, reg_
 
         def closure():
             global train_loss, reg_
             optimizer.zero_grad()
+
             pred = self.forward(dataset['train_input'][train_id].to(device))
 
             # calculate regression loss
-            if sglr_avoid:  # avoid instances with nan predicted
-                id_ = torch.where(~torch.isnan(torch.sum(pred, dim=1)))[0]
-                # train_loss = loss_fn(pred[id_], dataset['train_label'][train_id][id_].to(device))
-                train_loss = partial_ll_loss(pred, _reshape_tensor_with_nans(tb), _reshape_tensor_with_nans(eb))
-            else:
-                # train_loss = loss_fn(pred, dataset['train_label'][train_id].to(device))
-                train_loss = partial_ll_loss(pred, _reshape_tensor_with_nans(tb), _reshape_tensor_with_nans(eb))
+            train_loss = partial_ll_loss(pred, _reshape_tensor_with_nans(tb), _reshape_tensor_with_nans(eb))
 
             # calculate regularization loss
             reg_ = reg(self.acts_scale)
@@ -1001,54 +992,53 @@ class KAN(nn.Module):
         for _ in pbar:
             # randomly sample from training and testing data with batch size
             train_id = np.random.choice(dataset['train_input'].shape[0], batch_size, replace=False)
-            # test_id = np.random.choice(dataset['test_input'].shape[0], batch_size_test, replace=False)
+            val_id = np.random.choice(dataset['val_input'].shape[0], batch_size_test, replace=False)
 
             xb = dataset['train_input'][train_id].to(device)
             tb = dataset['train_time'][train_id].to(device)
             eb = dataset['train_event'][train_id].to(device)
 
+            xb_v = dataset['val_input'][val_id].to(device)
+            tb_v = dataset['val_time'][val_id].to(device)
+            eb_v = dataset['val_event'][val_id].to(device)
+
             if _ % grid_update_freq == 0 and _ < stop_grid_update_step and update_grid:
-                self.update_grid_from_samples(dataset['train_input'][train_id].to(device))
+                self.update_grid_from_samples(xb)
 
             if opt == "LBFGS":
                 optimizer.step(closure)
 
             if opt == "Adam":
-                pred = self.forward(xb)
-                if sglr_avoid:
-                    id_ = torch.where(~torch.isnan(torch.sum(pred, dim=1)))[0]
-                    # train_loss = loss_fn(pred[id_], dataset['train_label'][train_id][id_].to(device))
-                    train_loss = partial_ll_loss(pred, _reshape_tensor_with_nans(tb), _reshape_tensor_with_nans(eb))
-                else:
-                    # train_loss = loss_fn(pred, dataset['train_label'][train_id].to(device))
-                    train_loss = partial_ll_loss(pred, _reshape_tensor_with_nans(tb), _reshape_tensor_with_nans(eb))
-                reg_ = reg(self.acts_scale)
-                loss = train_loss + lamb * reg_
                 optimizer.zero_grad()
+
+                train_loss = partial_ll_loss(
+                    self.forward(xb), _reshape_tensor_with_nans(tb), _reshape_tensor_with_nans(eb))
+
+                # calculate regularization loss
+                reg_ = reg(self.acts_scale)
+
+                # backpropagation
+                loss = train_loss + lamb * reg_
                 loss.backward()
                 optimizer.step()
 
-            # # evaluate model performance on testing data
-            # test_loss = loss_fn_eval(
-            #     self.forward(dataset['test_input'][test_id].to(device)),
-            #     dataset['test_label'][test_id].to(device))
+            # evaluate model performance on testing data
+            test_loss = partial_ll_loss(
+                self.forward(xb_v), _reshape_tensor_with_nans(tb_v), _reshape_tensor_with_nans(eb_v))
 
             if _ % log == 0:
-                # pbar.set_description(
-                #     "train loss: %.2e | test loss: %.2e | reg: %.2e " % (
-                #         torch.sqrt(train_loss).cpu().detach().numpy(),
-                #         torch.sqrt(test_loss).cpu().detach().numpy(),
-                #         reg_.cpu().detach().numpy()))
                 pbar.set_description(
-                    "train loss: %.2e | reg: %.2e " % (
-                        torch.sqrt(train_loss).cpu().detach().numpy(), reg_.cpu().detach().numpy()))
+                    "train loss: %.2e | validation loss: %.2e | reg: %.2e " % (
+                        torch.sqrt(train_loss).cpu().detach().numpy(),
+                        torch.sqrt(test_loss).cpu().detach().numpy(),
+                        reg_.cpu().detach().numpy()))
 
             if metrics is not None:
                 for i in range(len(metrics)):
                     results[metrics[i].__name__].append(metrics[i]().item())
 
             results['train_loss'].append(torch.sqrt(train_loss).cpu().detach().numpy())
-            # results['test_loss'].append(torch.sqrt(test_loss).cpu().detach().numpy())
+            results['val_loss'].append(torch.sqrt(test_loss).cpu().detach().numpy())
             results['reg'].append(reg_.cpu().detach().numpy())
 
             if save_fig and _ % save_fig_freq == 0:
@@ -1115,7 +1105,7 @@ class KAN(nn.Module):
             threshold : float
                 the threshold used to determine whether a node is small enough
             mode : str
-                "auto" or "manual". If "auto", the thresold will be used to automatically prune away nodes.
+                "auto" or "manual". If "auto", the threshold will be used to automatically prune away nodes.
                 If "manual", active_neuron_id is needed to specify which neurons are kept (others are thrown away).
             active_neuron_id : list of id lists
                 For example, [[0,1],[0,2,3]] means keeping the 0/1 neuron in the 1st hidden layer and the 0/2/3 neuron
