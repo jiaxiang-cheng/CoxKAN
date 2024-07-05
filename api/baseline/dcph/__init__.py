@@ -199,18 +199,18 @@ class DeepCoxPH:
 
     def predict_survival(self, x, t=None):
         """
-        Returns the estimated survival probability at time \( t \),
+        Returns the estimated survival probability at time, t.
         \( \widehat{\mathbb{P}}(T > t|X) \) for some input data \( x \).
 
         Parameters
         ----------
         x: np.ndarray
-            A numpy array of the input features, \( x \).
+            A numpy array of the input features, x.
         t: list or float
             a list or float of the times at which survival probability is
             to be computed
         Returns:
-          np.array: numpy array of the survival probabilites at each time in t.
+          np.array: numpy array of the survival probabilities at each time in t.
 
         """
         if not self.fitted:

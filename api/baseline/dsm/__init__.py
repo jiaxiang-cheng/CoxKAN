@@ -207,40 +207,40 @@ class DSMBase():
                                          optimizer=optimizer,
                                          risks=risks)
 
-    def fit(self, x, t, e, vsize=0.15, val_data=None,
-            iters=1, learning_rate=1e-3, batch_size=100,
-            elbo=True, optimizer="Adam"):
+    def fit(self, x, t, e, vsize=0.15, val_data=None, iters=1, learning_rate=1e-3,
+            batch_size=100, elbo=True, optimizer="Adam"):
 
-        r"""This method is used to train an instance of the DSM model.
+        """
+        This method is used to train an instance of the DSM model.
 
-    Parameters
-    ----------
-    x: np.ndarray
-        A numpy array of the input features, \( x \).
-    t: np.ndarray
-        A numpy array of the event/censoring times, \( t \).
-    e: np.ndarray
-        A numpy array of the event/censoring indicators, \( \delta \).
-        \( \delta = 1 \) means the event took place.
-    vsize: float
-        Amount of data to set aside as the validation set.
-    val_data: tuple
-        A tuple of the validation dataset. If passed vsize is ignored.
-    iters: int
-        The maximum number of training iterations on the training dataset.
-    learning_rate: float
-        The learning rate for the `Adam` optimizer.
-    batch_size: int
-        learning is performed on mini-batches of input data. this parameter
-        specifies the size of each mini-batch.
-    elbo: bool
-        Whether to use the Evidence Lower Bound for optimization.
-        Default is True.
-    optimizer: str
-        The choice of the gradient based optimization method. One of
-        'Adam', 'RMSProp' or 'SGD'.
+        Parameters
+        ----------
+        x: np.ndarray
+            A numpy array of the input features, \( x \).
+        t: np.ndarray
+            A numpy array of the event/censoring times, \( t \).
+        e: np.ndarray
+            A numpy array of the event/censoring indicators, \( \delta \).
+            \( \delta = 1 \) means the event took place.
+        vsize: float
+            Amount of data to set aside as the validation set.
+        val_data: tuple
+            A tuple of the validation dataset. If passed vsize is ignored.
+        iters: int
+            The maximum number of training iterations on the training dataset.
+        learning_rate: float
+            The learning rate for the `Adam` optimizer.
+        batch_size: int
+            learning is performed on mini-batches of input data. this parameter
+            specifies the size of each mini-batch.
+        elbo: bool
+            Whether to use the Evidence Lower Bound for optimization.
+            Default is True.
+        optimizer: str
+            The choice of the gradient based optimization method. One of
+            'Adam', 'RMSProp' or 'SGD'.
 
-    """
+        """
 
         processed_data = self._preprocess_training_data(x, t, e,
                                                         vsize, val_data,
@@ -270,24 +270,29 @@ class DSMBase():
 
         return self
 
+    def forward(self, x):
+        x = self._preprocess_test_data(x)
+        return self.torch_model(x)
+
     def compute_nll(self, x, t, e):
-        r"""This function computes the negative log likelihood of the given data.
-    In case of competing risks, the negative log likelihoods are summed over
-    the different events' type.
+        """
+        This function computes the negative log likelihood of the given data.
+        In case of competing risks, the negative log likelihoods are summed over
+        the different events' type.
 
-    Parameters
-    ----------
-    x: np.ndarray
-        A numpy array of the input features, \( x \).
-    t: np.ndarray
-        A numpy array of the event/censoring times, \( t \).
-    e: np.ndarray
-        A numpy array of the event/censoring indicators, \( \delta \).
-        \( \delta = r \) means the event r took place.
+        Parameters
+        ----------
+        x: np.ndarray
+            A numpy array of the input features, \( x \).
+        t: np.ndarray
+            A numpy array of the event/censoring times, \( t \).
+        e: np.ndarray
+            A numpy array of the event/censoring indicators, \( \delta \).
+            \( \delta = r \) means the event r took place.
 
-    Returns:
-      float: Negative log likelihood.
-    """
+        Returns:
+          float: Negative log likelihood.
+        """
         if not self.fitted:
             raise Exception("The model has not been fitted yet. Please fit the " +
                             "model using the `fit` method on some training data " +
@@ -347,16 +352,17 @@ class DSMBase():
         return (x_train, t_train, e_train, x_val, t_val, e_val)
 
     def predict_mean(self, x, risk=1):
-        r"""Returns the mean Time-to-Event \( t \)
+        """
+        Returns the mean Time-to-Event \( t \)
 
-    Parameters
-    ----------
-    x: np.ndarray
-        A numpy array of the input features, \( x \).
-    Returns:
-      np.array: numpy array of the mean time to event.
+        Parameters
+        ----------
+        x: np.ndarray
+            A numpy array of the input features, \( x \).
+        Returns:
+          np.array: numpy array of the mean time to event.
 
-    """
+        """
 
         if self.fitted:
             x = self._preprocess_test_data(x)
@@ -368,20 +374,21 @@ class DSMBase():
                             "before calling `predict_mean`.")
 
     def predict_risk(self, x, t, risk=1):
-        r"""Returns the estimated risk of an event occuring before time \( t \)
-      \( \widehat{\mathbb{P}}(T\leq t|X) \) for some input data \( x \).
+        """
+        Returns the estimated risk of an event occurring before time \( t \)
+          \( \widehat{\mathbb{P}}(T\leq t|X) \) for some input data \( x \).
 
-    Parameters
-    ----------
-    x: np.ndarray
-        A numpy array of the input features, \( x \).
-    t: list or float
-        a list or float of the times at which survival probability is
-        to be computed
-    Returns:
-      np.array: numpy array of the risks at each time in t.
+        Parameters
+        ----------
+        x: np.ndarray
+            A numpy array of the input features, \( x \).
+        t: list or float
+            a list or float of the times at which survival probability is
+            to be computed
+        Returns:
+          np.array: numpy array of the risks at each time in t.
 
-    """
+        """
 
         if self.fitted:
             return 1 - self.predict_survival(x, t, risk=str(risk))
@@ -391,20 +398,21 @@ class DSMBase():
                             "before calling `predict_risk`.")
 
     def predict_survival(self, x, t, risk=1):
-        r"""Returns the estimated survival probability at time \( t \),
-      \( \widehat{\mathbb{P}}(T > t|X) \) for some input data \( x \).
+        """
+        Returns the estimated survival probability at time \( t \),
+          \( \widehat{\mathbb{P}}(T > t|X) \) for some input data \( x \).
 
-    Parameters
-    ----------
-    x: np.ndarray
-        A numpy array of the input features, \( x \).
-    t: list or float
-        a list or float of the times at which survival probability is
-        to be computed
-    Returns:
-      np.array: numpy array of the survival probabilites at each time in t.
+        Parameters
+        ----------
+        x: np.ndarray
+            A numpy array of the input features, \( x \).
+        t: list or float
+            a list or float of the times at which survival probability is
+            to be computed
+        Returns:
+          np.array: numpy array of the survival probabilites at each time in t.
 
-    """
+        """
         x = self._preprocess_test_data(x)
         if not isinstance(t, list):
             t = [t]
@@ -417,20 +425,21 @@ class DSMBase():
                             "before calling `predict_survival`.")
 
     def predict_pdf(self, x, t, risk=1):
-        r"""Returns the estimated pdf at time \( t \),
-      \( \widehat{\mathbb{P}}(T = t|X) \) for some input data \( x \). 
+        """
+        Returns the estimated pdf at time \( t \),
+          \( \widehat{\mathbb{P}}(T = t|X) \) for some input data \( x \).
 
-    Parameters
-    ----------
-    x: np.ndarray
-        A numpy array of the input features, \( x \).
-    t: list or float
-        a list or float of the times at which pdf is
-        to be computed
-    Returns:
-      np.array: numpy array of the estimated pdf at each time in t.
+        Parameters
+        ----------
+        x: np.ndarray
+            A numpy array of the input features, \( x \).
+        t: list or float
+            a list or float of the times at which pdf is
+            to be computed
+        Returns:
+          np.array: numpy array of the estimated pdf at each time in t.
 
-    """
+        """
         x = self._preprocess_test_data(x)
         if not isinstance(t, list):
             t = [t]
@@ -481,9 +490,9 @@ class DeepSurvivalMachines(DSMBase):
 
   Example
   -------
-  >>> from dsm import DeepSurvivalMachines
-  >>> model = DeepSurvivalMachines()
-  >>> model.fit(x, t, e)
+  # >>> from dsm import DeepSurvivalMachines
+  # >>> model = DeepSurvivalMachines()
+  # >>> model.fit(x, t, e)
 
   """
 
