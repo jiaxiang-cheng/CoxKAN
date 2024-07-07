@@ -19,6 +19,7 @@ from api.auton import preprocessing
 from api.survset.data import SurvLoader
 from api.baseline.dcm import DeepCoxMixtures
 from api.baseline.dcph import DeepCoxPH
+from api.baseline.nsc import NeuralSurvivalCluster
 
 if not sys.warnoptions: warnings.simplefilter("ignore")
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
@@ -170,6 +171,8 @@ if __name__ == '__main__':
             model = DeepCoxPH(layers=[100, 100])
         elif args.model == 'dcm':
             model = DeepCoxMixtures(layers=[100, 100])
+        elif args.model == 'nsc':
+            model = NeuralSurvivalCluster(inputdim=x_train.shape[1], k=3)
         else:
             model = DeepCoxPH(layers=[100, 100])
         # model = DeepSurvivalMachines(layers=[100, 100])
