@@ -3,18 +3,19 @@ import sys
 import warnings
 import argparse
 
-# import matplotlib
 import numpy as np
 import random
+
+import pandas as pd
 import torch
-from sksurv.metrics import concordance_index_censored, concordance_index_ipcw, brier_score, cumulative_dynamic_auc
+from lifelines import CoxPHFitter
+from sksurv.metrics import concordance_index_ipcw, brier_score, cumulative_dynamic_auc
 
 sys.path.append('./')
 
 from api.coxkan import CoxKAN
 from api.auton import preprocessing
 from api.survset.data import SurvLoader
-from api.baseline.dsm import DeepSurvivalMachines
 from api.baseline.dcm import DeepCoxMixtures
 from api.baseline.dcph import DeepCoxPH
 
@@ -55,12 +56,14 @@ def load_data(data=args.data):
     features = preprocessing.Preprocessor().fit_transform(
         df[num_feats + cat_feats], cat_feats=cat_feats, num_feats=num_feats)
 
-    values, times, events = features.values, df.time.values, df.event.values
+    # return variables, time of observation, events of interest
+    vs, ts, es = features.values, df.time.values, df.event.values
 
-    return values, times, events
+    return vs, ts, es
 
 
 if __name__ == '__main__':
+    # ============================================= PREPARATION ========================================================
     x, t, e = load_data()
 
     horizons = [0.25, 0.5, 0.75]
@@ -76,7 +79,8 @@ if __name__ == '__main__':
     t_train, t_test, t_val = t[:tr_size], t[-te_size:], t[tr_size:tr_size + vl_size]
     e_train, e_test, e_val = e[:tr_size], e[-te_size:], e[tr_size:tr_size + vl_size]
 
-    if args.model == 'CoxKAN':
+    # =============================================== TRAINING =========================================================
+    if args.model == 'coxkan':
         dataset = {
             'train_input': torch.from_numpy(x_train).to(device),
             'val_input': torch.from_numpy(x_val).to(device),
@@ -103,16 +107,43 @@ if __name__ == '__main__':
 
     else:
 
-        model = DeepCoxPH(layers=[100, 100])
-        # model = DeepCoxMixtures(layers=[100, 100])
+        if args.model == 'cph':
 
-        # The fit method is called to train the model
-        model.fit(x_train, t_train, e_train, iters=100, learning_rate=1e-4)
-        # model = DeepSurvivalMachines(layers=[100, 100])
+            train_data = pd.concat([pd.DataFrame(t_train), pd.DataFrame(e_train), pd.DataFrame(x_train)], axis=1)
+            column_names = ['duration', 'event']
+            for i in range(len(train_data.columns) - 2):
+                column_names.append('x_{}'.format(i))
+            train_data.columns = column_names
 
-        out_risk = model.predict_risk(x_test, times)
-        out_survival = model.predict_survival(x_test, times)
+            test_data = pd.concat([pd.DataFrame(x_test)], axis=1)
+            test_data.columns = column_names[2:]
 
+            # Train the CoxPH model using training data
+            cph = CoxPHFitter(penalizer=0.001)
+            cph.fit(train_data, duration_col='duration', event_col='event')
+
+            # Get predicted percentiles for the testing set
+            out_survival = cph.predict_survival_function(test_data, times)
+            out_risk = cph.predict_cumulative_hazard(test_data, times)
+            out_survival = out_survival.T.to_numpy()
+            out_risk = out_risk.T.to_numpy()
+
+        else:
+
+            if args.model == 'dcph':
+                model = DeepCoxPH(layers=[100, 100])
+            elif args.model == 'dcm':
+                model = DeepCoxMixtures(layers=[100, 100])
+            else:
+                model = DeepCoxPH(layers=[100, 100])
+            # model = DeepSurvivalMachines(layers=[100, 100])
+
+            model.fit(x_train, t_train, e_train, iters=100, learning_rate=1e-4)
+
+            out_risk = model.predict_risk(x_test, times)
+            out_survival = model.predict_survival(x_test, times)
+
+    # ============================================== EVALUATION ========================================================
     et_train = np.array([(e_train[i], t_train[i]) for i in range(len(e_train))], dtype=[('e', bool), ('t', float)])
     et_test = np.array([(e_test[i], t_test[i]) for i in range(len(e_test))], dtype=[('e', bool), ('t', float)])
     et_val = np.array([(e_val[i], t_val[i]) for i in range(len(e_val))], dtype=[('e', bool), ('t', float)])
