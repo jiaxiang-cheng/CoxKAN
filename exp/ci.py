@@ -25,13 +25,13 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 # matplotlib.style.use('default')
 
 parser = argparse.ArgumentParser()
-# parser.add_argument("--seed", type=int, dest="seed")
+parser.add_argument("--seed", type=int, dest="seed")
 parser.add_argument("--data", type=str, dest="data")
 parser.add_argument("--model", type=str, dest="model")
 args = parser.parse_args()
 
-random_state = 0
-# random_state = args.seed
+# random_state = 0
+random_state = args.seed
 random.seed(random_state)
 np.random.seed(random_state)
 torch.random.manual_seed(random_state)
