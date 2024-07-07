@@ -9,6 +9,7 @@ import random
 import pandas as pd
 import torch
 from lifelines import CoxPHFitter
+from sksurv.ensemble import RandomSurvivalForest
 from sksurv.metrics import concordance_index_ipcw, brier_score, cumulative_dynamic_auc
 
 sys.path.append('./')
@@ -81,6 +82,7 @@ if __name__ == '__main__':
 
     # =============================================== TRAINING =========================================================
     if args.model == 'coxkan':
+
         dataset = {
             'train_input': torch.from_numpy(x_train).to(device),
             'val_input': torch.from_numpy(x_val).to(device),
@@ -105,43 +107,77 @@ if __name__ == '__main__':
         out_risk = model.predict_risk(dataset['test_input'], times)
         out_survival = model.predict_survival(dataset['test_input'], times)
 
+    elif args.model == 'cph':
+
+        train_data = pd.concat([pd.DataFrame(t_train), pd.DataFrame(e_train), pd.DataFrame(x_train)], axis=1)
+        column_names = ['duration', 'event']
+        for i in range(len(train_data.columns) - 2):
+            column_names.append('x_{}'.format(i))
+        train_data.columns = column_names
+
+        test_data = pd.concat([pd.DataFrame(x_test)], axis=1)
+        test_data.columns = column_names[2:]
+
+        # Train the CoxPH model using training data
+        cph = CoxPHFitter(penalizer=0.001)
+        cph.fit(train_data, duration_col='duration', event_col='event')
+
+        # Get predicted percentiles for the testing set
+        out_survival = cph.predict_survival_function(test_data, times)
+        out_risk = cph.predict_cumulative_hazard(test_data, times)
+        out_survival = out_survival.T.to_numpy()
+        out_risk = out_risk.T.to_numpy()
+
+    elif args.model == 'rsf':  # Random Survival Forest
+
+        X_train = pd.DataFrame(x_train)
+        y_train = np.array([(e_train[i] == 1, t_train[i]) for i in range(len(e_train))],
+                           dtype=[('event', bool), ('time', float)])
+
+        column_names = []
+        for i in range(len(X_train.columns)):
+            column_names.append('x_{}'.format(i))
+        X_train.columns = column_names
+
+        X_test = pd.concat([pd.DataFrame(x_test)], axis=1)
+        X_test.columns = column_names
+
+        # train the RSF model on the training data
+        rsf = RandomSurvivalForest(n_estimators=100, random_state=random_state)
+        rsf.fit(X_train, y_train)
+
+        # Get predicted percentiles for the testing set
+        surv_funcs = rsf.predict_survival_function(X_test, return_array=True)
+        hazard_funcs = rsf.predict_cumulative_hazard_function(X_test, return_array=True)
+        index_horizons = []
+
+        def look_for_index(i):
+            idx = None
+            for idx, j in enumerate(rsf.unique_times_):
+                if j >= i:
+                    break
+            return idx
+
+        for i in times:
+            index_horizons.append(int(look_for_index(i)))
+
+        out_survival = surv_funcs[:, index_horizons]
+        out_risk = hazard_funcs[:, index_horizons]
+
     else:
 
-        if args.model == 'cph':
-
-            train_data = pd.concat([pd.DataFrame(t_train), pd.DataFrame(e_train), pd.DataFrame(x_train)], axis=1)
-            column_names = ['duration', 'event']
-            for i in range(len(train_data.columns) - 2):
-                column_names.append('x_{}'.format(i))
-            train_data.columns = column_names
-
-            test_data = pd.concat([pd.DataFrame(x_test)], axis=1)
-            test_data.columns = column_names[2:]
-
-            # Train the CoxPH model using training data
-            cph = CoxPHFitter(penalizer=0.001)
-            cph.fit(train_data, duration_col='duration', event_col='event')
-
-            # Get predicted percentiles for the testing set
-            out_survival = cph.predict_survival_function(test_data, times)
-            out_risk = cph.predict_cumulative_hazard(test_data, times)
-            out_survival = out_survival.T.to_numpy()
-            out_risk = out_risk.T.to_numpy()
-
+        if args.model == 'dcph':
+            model = DeepCoxPH(layers=[100, 100])
+        elif args.model == 'dcm':
+            model = DeepCoxMixtures(layers=[100, 100])
         else:
+            model = DeepCoxPH(layers=[100, 100])
+        # model = DeepSurvivalMachines(layers=[100, 100])
 
-            if args.model == 'dcph':
-                model = DeepCoxPH(layers=[100, 100])
-            elif args.model == 'dcm':
-                model = DeepCoxMixtures(layers=[100, 100])
-            else:
-                model = DeepCoxPH(layers=[100, 100])
-            # model = DeepSurvivalMachines(layers=[100, 100])
+        model.fit(x_train, t_train, e_train, iters=100, learning_rate=1e-4)
 
-            model.fit(x_train, t_train, e_train, iters=100, learning_rate=1e-4)
-
-            out_risk = model.predict_risk(x_test, times)
-            out_survival = model.predict_survival(x_test, times)
+        out_risk = model.predict_risk(x_test, times)
+        out_survival = model.predict_survival(x_test, times)
 
     # ============================================== EVALUATION ========================================================
     et_train = np.array([(e_train[i], t_train[i]) for i in range(len(e_train))], dtype=[('e', bool), ('t', float)])
