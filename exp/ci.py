@@ -17,6 +17,7 @@ sys.path.append('./')
 from api.coxkan import CoxKAN
 from api.auton import preprocessing
 from api.survset.data import SurvLoader
+from api.baseline.dsm import DeepSurvivalMachines
 from api.baseline.dcm import DeepCoxMixtures
 from api.baseline.dcph import DeepCoxPH
 from api.baseline.nsc import NeuralSurvivalCluster
@@ -167,15 +168,17 @@ if __name__ == '__main__':
 
     else:
 
+        # deep learning based survival models
         if args.model == 'dcph':
             model = DeepCoxPH(layers=[100, 100])
         elif args.model == 'dcm':
             model = DeepCoxMixtures(layers=[100, 100])
+        elif args.model == 'dsm':
+            model = DeepSurvivalMachines(layers=[100, 100])
         elif args.model == 'nsc':
             model = NeuralSurvivalCluster(inputdim=x_train.shape[1], k=3)
-        else:
+        else:  # by default, use the DeepSurv or the DCPH model
             model = DeepCoxPH(layers=[100, 100])
-        # model = DeepSurvivalMachines(layers=[100, 100])
 
         model.fit(x_train, t_train, e_train, iters=100, learning_rate=1e-4)
 
