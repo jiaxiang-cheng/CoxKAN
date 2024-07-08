@@ -20,12 +20,10 @@ def get_optimizer(models, lr, optimizer, **kwargs):
         raise NotImplementedError('Optimizer ' + optimizer + ' is not implemented')
 
 
-def train_nsc(model,
-              x_train, t_train, e_train,
-              x_valid, t_valid, e_valid,
-              n_iter=1000, lr=1e-3, weight_decay=0.001,
-              bs=100, cuda=False):
-    # Separate oprimizer as one might need more time to converge
+def train_nsc(model, x_train, t_train, e_train, x_valid, t_valid, e_valid, n_iter=100,
+              lr=1e-3, weight_decay=0.001, bs=100, cuda=False):
+
+    # Separate optimizer as one might need more time to converge
     optimizer = get_optimizer(model, lr, model.optimizer, weight_decay=weight_decay)
     patience, best_loss, previous_loss = 0, np.inf, np.inf
     best_param = deepcopy(model.state_dict())

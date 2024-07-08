@@ -82,6 +82,10 @@ if __name__ == '__main__':
     t_train, t_test, t_val = t[:tr_size], t[-te_size:], t[tr_size:tr_size + vl_size]
     e_train, e_test, e_val = e[:tr_size], e[-te_size:], e[tr_size:tr_size + vl_size]
 
+    # create file for logging metadata
+    with open("./results/{}_{}_{}.txt".format(args.model, args.data, args.seed), "w") as file:
+        file.write("model:\t{}\ndata:\t{}\nseed:\t{}".format(args.model, args.data, args.seed) + "\n\n")
+
     # =============================================== TRAINING =========================================================
     if args.model == 'coxkan':
 
@@ -153,12 +157,14 @@ if __name__ == '__main__':
         hazard_funcs = rsf.predict_cumulative_hazard_function(X_test, return_array=True)
         index_horizons = []
 
+
         def look_for_index(i):
             idx = None
             for idx, j in enumerate(rsf.unique_times_):
                 if j >= i:
                     break
             return idx
+
 
         for i in times:
             index_horizons.append(int(look_for_index(i)))
@@ -175,8 +181,11 @@ if __name__ == '__main__':
             model = DeepCoxMixtures(layers=[100, 100])
         elif args.model == 'dsm':
             model = DeepSurvivalMachines(layers=[100, 100])
-        elif args.model == 'nsc':
-            model = NeuralSurvivalCluster(inputdim=x_train.shape[1], k=3)
+        # Neural Survival Clustering (NSC) shows unsatisfying results in our experiments, thus excluded
+        # elif args.model == 'nsc':
+        #     model = NeuralSurvivalCluster(
+        #         inputdim=x_train.shape[1], k=3, layers=[100, 100], act='ReLU6',
+        #         layers_surv=[100, 100], representation=50, act_surv='Tanh')
         else:  # by default, use the DeepSurv or the DCPH model
             model = DeepCoxPH(layers=[100, 100])
 
@@ -194,15 +203,27 @@ if __name__ == '__main__':
     for i, _ in enumerate(times):
         cis.append(concordance_index_ipcw(et_train, et_test, out_risk[:, i], times[i])[0])
 
-    # Brier Score
-    brs = [brier_score(et_train, et_test, out_survival, times)[1]]
+    try:
+        # Brier Score
+        brs = [brier_score(et_train, et_test, out_survival, times)[1]]
 
-    roc_auc = []  # ROC AUC
-    for i, _ in enumerate(times):
-        roc_auc.append(cumulative_dynamic_auc(et_train, et_test, out_risk[:, i], times[i])[0])
+        roc_auc = []  # ROC AUC
+        for i, _ in enumerate(times):
+            roc_auc.append(cumulative_dynamic_auc(et_train, et_test, out_risk[:, i], times[i])[0])
 
-    for horizon in enumerate(horizons):
-        print(f"For {horizon[1]} quantile,")
-        print("TD Concordance Index:", cis[horizon[0]])
-        print("Brier Score:", brs[0][horizon[0]])
-        print("ROC AUC ", roc_auc[horizon[0]][0], "\n")
+        for horizon in enumerate(horizons):
+            print("For {}-th quantile,".format(int(horizon[1] * 100)))
+            print("C-Index:\t", cis[horizon[0]])
+            print("Brier Score:\t", brs[0][horizon[0]])
+            print("ROC AUC:\t", roc_auc[horizon[0]][0], "\n")
+
+            # logging modeling results
+            with open("./results/{}_{}_{}.txt".format(args.model, args.data, args.seed), "a") as file:
+                file.write(
+                    "Quantile:\t{}".format(horizon[1]) +
+                    "\nC-Index ({}):\t{}".format(horizon[1], cis[horizon[0]]) +
+                    "\nBrier Score ({}):\t{}".format(horizon[1], brs[0][horizon[0]]) +
+                    "\nROC AUC ({}):\t{}\n\n".format(horizon[1], roc_auc[horizon[0]][0]))
+
+    except ValueError:
+        os.remove("./results/{}_{}_{}.txt".format(args.model, args.data, args.seed))

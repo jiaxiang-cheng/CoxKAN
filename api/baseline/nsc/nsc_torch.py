@@ -90,14 +90,15 @@ def create_representation(inputdim, layers, activation, dropout=0., last=None):
 
 class NeuralSurvivalClusterTorch(nn.Module):
 
-    def __init__(self, inputdim, layers=None, act='ReLU6', layers_surv=None, representation=50,
-                 act_surv='Tanh',
+    def __init__(self, inputdim, layers=None, act='ReLU6', layers_surv=None, representation=50, act_surv='Tanh',
                  risks=1, k=3, dropout=0., optimizer="Adam"):
         super(NeuralSurvivalClusterTorch, self).__init__()
+
         if layers_surv is None:
-          layers_surv = [100]
+            layers_surv = [100]
         if layers is None:
-          layers = [100, 100, 100]
+            layers = [100, 100, 100]
+
         self.input_dim = inputdim
         self.risks = risks  # Competing risks
         self.k = k  # Number mixture
@@ -105,8 +106,9 @@ class NeuralSurvivalClusterTorch(nn.Module):
         self.dropout = dropout
         self.optimizer = optimizer
 
-        self.profile = create_representation(inputdim, layers + [self.k], act, self.dropout,
-                                             last=nn.LogSoftmax(dim=1))  # Proba for cluster P(cluster | x)
+        # Proba for cluster P(cluster | x)
+        self.profile = create_representation(inputdim, layers + [self.k], act, self.dropout, last=nn.LogSoftmax(dim=1))
+
         self.latent = nn.ParameterList([nn.Parameter(torch.randn((1, self.representation))) for _ in range(self.k)])
         self.outcome = nn.ModuleList(
             [create_representation_positive(1 + self.representation, layers_surv + [risks], act_surv, self.dropout) for
