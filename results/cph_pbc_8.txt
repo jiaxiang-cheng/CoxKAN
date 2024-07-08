@@ -1,0 +1,4 @@
+model:	cph
+data:	pbc
+seed:	8
+

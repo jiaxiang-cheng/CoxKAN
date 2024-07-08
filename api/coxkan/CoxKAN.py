@@ -1320,6 +1320,7 @@ class CoxKAN(nn.Module):
         fixing (0,1,0) with x^2, r2=0.9962921738624573
         fixing (1,0,0) with exp, r2=0.9980258941650391
         """
+        logs = ''
         for l in range(len(self.width) - 1):
             for i in range(self.width[l]):
                 for j in range(self.width[l + 1]):
@@ -1331,6 +1332,8 @@ class CoxKAN(nn.Module):
                         self.fix_symbolic(l, i, j, name, verbose=verbose > 1)
                         if verbose >= 1:
                             print(f'fixing ({l},{i},{j}) with {name}, r2={r2}')
+                            logs += f'fixing ({l},{i},{j}) with {name}, r2={r2}' + '\n'
+        return logs
 
     def symbolic_formula(self, floating_digit=3, var=None, normalizer=None, simplify=False, output_normalizer=None):
         """

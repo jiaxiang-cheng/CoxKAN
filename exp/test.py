@@ -106,9 +106,15 @@ if __name__ == '__main__':
         model = CoxKAN(width=[x_train.shape[1], 1], grid=5, k=3, seed=0)
         model.fit(dataset, opt=optimizer, steps=20, lr=lr, lamb=0.01, lamb_entropy=10.)
 
-        model.auto_symbolic(lib=['x', 'x^2', 'x^3', 'x^4', 'exp', 'log', 'sqrt', 'tanh'])
+        logs = model.auto_symbolic(lib=['x', 'x^2', 'x^3', 'x^4', 'exp', 'log', 'sqrt', 'tanh', 'sin'])
         model.fit(dataset, opt=optimizer, lr=lr, steps=20)
-        print(model.symbolic_formula(floating_digit=3)[0][0])
+
+        with open("./results/coxkan_symbol_{}_{}.txt".format(args.data, args.seed), "w") as file:
+            file.write("model:\t{}\ndata:\t{}\nseed:\t{}".format(args.model, args.data, args.seed) + "\n\n")
+            file.write("{}".format(logs) + "\n\n")
+            file.write("{}".format(model.symbolic_formula(floating_digit=3)[0][0]) + "\n\n")
+            file.write("{}".format(model.symbolic_formula(floating_digit=10)[0][0]))
+            print(model.symbolic_formula(floating_digit=3)[0][0])
 
         out_risk = model.predict_risk(dataset['test_input'], times)
         out_survival = model.predict_survival(dataset['test_input'], times)
@@ -199,11 +205,11 @@ if __name__ == '__main__':
     et_test = np.array([(e_test[i], t_test[i]) for i in range(len(e_test))], dtype=[('e', bool), ('t', float)])
     et_val = np.array([(e_val[i], t_val[i]) for i in range(len(e_val))], dtype=[('e', bool), ('t', float)])
 
-    cis = []  # Concordance Index
-    for i, _ in enumerate(times):
-        cis.append(concordance_index_ipcw(et_train, et_test, out_risk[:, i], times[i])[0])
-
     try:
+        cis = []  # Concordance Index
+        for i, _ in enumerate(times):
+            cis.append(concordance_index_ipcw(et_train, et_test, out_risk[:, i], times[i])[0])
+
         # Brier Score
         brs = [brier_score(et_train, et_test, out_survival, times)[1]]
 
@@ -227,3 +233,5 @@ if __name__ == '__main__':
 
     except ValueError:
         os.remove("./results/{}_{}_{}.txt".format(args.model, args.data, args.seed))
+        if args.model == 'coxkan':
+            os.remove("./results/coxkan_symbol_{}_{}.txt".format(args.data, args.seed))
