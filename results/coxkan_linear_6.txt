@@ -1,0 +1,4 @@
+model:	coxkan
+data:	linear
+seed:	6
+

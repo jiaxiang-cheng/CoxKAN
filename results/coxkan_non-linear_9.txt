@@ -1,0 +1,19 @@
+model:	coxkan
+data:	non-linear
+seed:	9
+
+Quantile:	0.25
+C-Index (0.25):	0.6
+Brier Score (0.25):	0.18898547807320443
+ROC AUC (0.25):	0.6059316528066528
+
+Quantile:	0.5
+C-Index (0.5):	0.62222333150302
+Brier Score (0.5):	0.23074108609100175
+ROC AUC (0.5):	0.6773419335483387
+
+Quantile:	0.75
+C-Index (0.75):	0.6126080325368581
+Brier Score (0.75):	0.1933778097808318
+ROC AUC (0.75):	0.6769939292442957
+

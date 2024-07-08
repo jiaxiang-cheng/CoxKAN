@@ -1,0 +1,19 @@
+model:	rsf
+data:	non-linear
+seed:	1
+
+Quantile:	0.25
+C-Index (0.25):	0.597292817679558
+Brier Score (0.25):	0.158265451875
+ROC AUC (0.25):	0.6008410256410257
+
+Quantile:	0.5
+C-Index (0.5):	0.5605645330135709
+Brier Score (0.5):	0.2580822895138889
+ROC AUC (0.5):	0.5639481000926785
+
+Quantile:	0.75
+C-Index (0.75):	0.5575717514606167
+Brier Score (0.75):	0.23528642875
+ROC AUC (0.75):	0.5918519747759708
+

@@ -237,7 +237,7 @@ class DSMBase():
             Whether to use the Evidence Lower Bound for optimization.
             Default is True.
         optimizer: str
-            The choice of the gradient based optimization method. One of
+            The choice of the gradient-based optimization method. One of
             'Adam', 'RMSProp' or 'SGD'.
 
         """
@@ -311,7 +311,7 @@ class DSMBase():
 
     def _preprocess_test_data(self, x):
         x = _dataframe_to_array(x)
-        return torch.from_numpy(x)
+        return torch.from_numpy(x).double()
 
     def _preprocess_training_data(self, x, t, e, vsize, val_data, random_seed):
 

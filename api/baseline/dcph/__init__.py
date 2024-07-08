@@ -186,6 +186,7 @@ class DeepCoxPH:
         return self
 
     def forward(self, x):
+        x = self._preprocess_test_data(x)
         return self.torch_model[0](x)
 
     def predict_risk(self, x, t=None):

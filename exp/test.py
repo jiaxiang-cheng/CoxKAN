@@ -1,3 +1,4 @@
+import math
 import os
 import sys
 import warnings
@@ -42,27 +43,61 @@ device = 'cpu'
 
 
 def load_data(data=args.data):
-    loader = SurvLoader()
+    if data == 'linear' or data == 'non-linear':
+        ranges, n_var, n_sample = [-1, 1], 2, 2000
 
-    # load dataset and its reference
-    df, ref = loader.load_dataset(ds_name=data).values()
-    df = df.sample(frac=1).reset_index(drop=True)
+        if data == 'linear':  # Linear Experiment
+            f = lambda x: x[:, [0]] + x[:, [1]] * 2
+        else:  # Non-Linear Experiment
+            f = lambda x: math.log(5) * torch.exp(-(x[:, [0]] ** 2 + x[:, [1]] ** 2) / (2 * 0.5 ** 2))
 
-    # collect numerical and categorical features
-    cat_feats, num_feats = [], []
-    for i in df.columns:
-        if i.split('_')[0] == 'num':
-            num_feats.append(i)
-        if i.split('_')[0] == 'fac':
-            cat_feats.append(i)
+        if len(np.array(ranges).shape) == 1:
+            ranges = np.array(ranges * n_var).reshape(n_var, 2)
+        else:
+            ranges = np.array(ranges)
 
-    features = preprocessing.Preprocessor().fit_transform(
-        df[num_feats + cat_feats], cat_feats=cat_feats, num_feats=num_feats)
+        train_input = torch.zeros(n_sample, n_var)
+        for i in range(n_var):
+            train_input[:, i] = torch.rand(n_sample, ) * (ranges[i, 1] - ranges[i, 0]) + ranges[i, 0]
 
-    # return variables, time of observation, events of interest
-    vs, ts, es = features.values, df.time.values, df.event.values
+        train_label = f(train_input)
 
-    return vs, ts, es
+        df = pd.concat([pd.DataFrame(train_input.numpy()), pd.DataFrame(train_label.numpy())], axis=1)
+        df.columns = ['x1', 'x2', 'y']
+
+        # randomly assign initial death time and individual death time
+        df['initial_death'] = np.random.exponential(5, size=n_sample)
+        df['ctime'] = df.initial_death / np.exp(df.y)
+
+        df['event'] = 1  # generate events
+        df.loc[df.ctime > np.quantile(df.ctime, 0.9), 'event'] = 0
+
+        df['time'] = df['ctime']  # general final observation time
+        df.loc[df.ctime > np.quantile(df.ctime, 0.9), 'time'] = np.quantile(df.ctime, 0.9)
+
+        # return variables, time of observation, events of interest
+        return df[['x1', 'x2']].values, df.time.values, df.event.values
+
+    else:
+        loader = SurvLoader()
+
+        # load dataset and its reference
+        df, ref = loader.load_dataset(ds_name=data).values()
+        df = df.sample(frac=1).reset_index(drop=True)
+
+        # collect numerical and categorical features
+        cat_feats, num_feats = [], []
+        for i in df.columns:
+            if i.split('_')[0] == 'num':
+                num_feats.append(i)
+            if i.split('_')[0] == 'fac':
+                cat_feats.append(i)
+
+        features = preprocessing.Preprocessor().fit_transform(
+            df[num_feats + cat_feats], cat_feats=cat_feats, num_feats=num_feats)
+
+        # return variables, time of observation, events of interest
+        return features.values, df.time.values, df.event.values
 
 
 if __name__ == '__main__':
@@ -104,7 +139,7 @@ if __name__ == '__main__':
         lr = 0.001
 
         model = CoxKAN(width=[x_train.shape[1], 1], grid=5, k=3, seed=0)
-        model.fit(dataset, opt=optimizer, steps=20, lr=lr, lamb=0.01, lamb_entropy=10.)
+        model.fit(dataset, opt=optimizer, steps=20, lr=lr, lamb=0.1, lamb_entropy=10.)
 
         logs = model.auto_symbolic(lib=['x', 'x^2', 'x^3', 'x^4', 'exp', 'log', 'sqrt', 'tanh', 'sin'])
         model.fit(dataset, opt=optimizer, lr=lr, steps=20)
@@ -118,6 +153,12 @@ if __name__ == '__main__':
 
         out_risk = model.predict_risk(dataset['test_input'], times)
         out_survival = model.predict_survival(dataset['test_input'], times)
+
+        # predict log-risk
+        df_lrisk = (pd.concat([
+            pd.DataFrame(dataset['test_input'].detach().numpy()),
+            pd.DataFrame(model.forward(dataset['test_input']).detach().numpy())
+        ], axis=1)).to_csv('./results/pred_{}_{}_{}.csv'.format(args.model, args.data, args.seed))
 
     elif args.model == 'cph':
 
@@ -139,6 +180,12 @@ if __name__ == '__main__':
         out_risk = cph.predict_cumulative_hazard(test_data, times)
         out_survival = out_survival.T.to_numpy()
         out_risk = out_risk.T.to_numpy()
+
+        # predict log-risk
+        df_lrisk = (pd.concat([
+            pd.DataFrame(x_test),
+            cph.predict_log_partial_hazard(test_data)
+        ], axis=1)).to_csv('./results/pred_{}_{}_{}.csv'.format(args.model, args.data, args.seed))
 
     elif args.model == 'rsf':  # Random Survival Forest
 
@@ -199,6 +246,12 @@ if __name__ == '__main__':
 
         out_risk = model.predict_risk(x_test, times)
         out_survival = model.predict_survival(x_test, times)
+
+        if args.model == 'dcph':  # predict log-risk
+            df_lrisk = (pd.concat([
+                pd.DataFrame(x_test),
+                pd.DataFrame(model.forward(x_test).detach().numpy())
+            ], axis=1)).to_csv('./results/pred_{}_{}_{}.csv'.format(args.model, args.data, args.seed))
 
     # ============================================== EVALUATION ========================================================
     et_train = np.array([(e_train[i], t_train[i]) for i in range(len(e_train))], dtype=[('e', bool), ('t', float)])
