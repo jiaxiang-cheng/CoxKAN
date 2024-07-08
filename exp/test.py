@@ -41,6 +41,8 @@ torch.random.manual_seed(random_state)
 
 device = 'cpu'
 
+print('Model: {}\tData: {}\tSeed: {}'.format(args.model, args.data, args.seed))
+
 
 def load_data(data=args.data):
     if data == 'linear' or data == 'non-linear':
