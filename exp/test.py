@@ -149,7 +149,7 @@ if __name__ == '__main__':
         with open("./results/coxkan_symbol_{}_{}.txt".format(args.data, args.seed), "w") as file:
             file.write("model:\t{}\ndata:\t{}\nseed:\t{}".format(args.model, args.data, args.seed) + "\n\n")
             file.write("{}".format(logs) + "\n\n")
-            file.write("{}".format(model.symbolic_formula(floating_digit=2)[0][0]) + "\n\n")
+            file.write("{}".format(model.symbolic_formula(floating_digit=1)[0][0]) + "\n\n")
             file.write("{}".format(model.symbolic_formula(floating_digit=3)[0][0]) + "\n\n")
             file.write("{}".format(model.symbolic_formula(floating_digit=10)[0][0]))
             print(model.symbolic_formula(floating_digit=3)[0][0])
