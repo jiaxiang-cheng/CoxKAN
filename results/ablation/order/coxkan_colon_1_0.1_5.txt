@@ -1,0 +1,21 @@
+model:	coxkan
+data:	colon
+seed:	1
+seed:	0.1
+seed:	5
+
+Quantile:	0.25
+C-Index (0.25):	0.7142455176209642
+Brier Score (0.25):	0.1099136242107285
+ROC AUC (0.25):	0.7246986512408183
+
+Quantile:	0.5
+C-Index (0.5):	0.698783076470498
+Brier Score (0.5):	0.16009411574576338
+ROC AUC (0.5):	0.7133723660170862
+
+Quantile:	0.75
+C-Index (0.75):	0.678860016398718
+Brier Score (0.75):	0.1939335200998768
+ROC AUC (0.75):	0.7008826328650077
+

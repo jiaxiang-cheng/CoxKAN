@@ -1,0 +1,21 @@
+model:	coxkan
+data:	rdata
+seed:	4
+seed:	0.1
+seed:	2
+
+Quantile:	0.25
+C-Index (0.25):	0.6323421624334382
+Brier Score (0.25):	0.09043422900808086
+ROC AUC (0.25):	0.6375153190131637
+
+Quantile:	0.5
+C-Index (0.5):	0.681987204719822
+Brier Score (0.5):	0.17230707209820492
+ROC AUC (0.5):	0.7153940952212325
+
+Quantile:	0.75
+C-Index (0.75):	0.6848091693446237
+Brier Score (0.75):	0.2060749622365825
+ROC AUC (0.75):	0.743442460746084
+
