@@ -1,0 +1,10 @@
+python exp/test-linear.py --data linear --model coxkan-l --seed 0
+python exp/test-linear.py --data linear --model coxkan-l --seed 1
+python exp/test-linear.py --data linear --model coxkan-l --seed 2
+python exp/test-linear.py --data linear --model coxkan-l --seed 3
+python exp/test-linear.py --data linear --model coxkan-l --seed 4
+python exp/test-linear.py --data linear --model coxkan-l --seed 5
+python exp/test-linear.py --data linear --model coxkan-l --seed 6
+python exp/test-linear.py --data linear --model coxkan-l --seed 7
+python exp/test-linear.py --data linear --model coxkan-l --seed 8
+python exp/test-linear.py --data linear --model coxkan-l --seed 9
