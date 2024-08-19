@@ -39,3 +39,18 @@ experimental results from the raw outputs of runs above:
 notebook/Summary.ipynb
 notebook/Symbolification.ipynb
 ```
+
+## Dataset Preparation
+
+Please download the survival datasets from:         
+https://github.com/ErikinBC/SurvSet/tree/main/SurvSet/_datagen    
+And put the contents from this folder `_datagen` under the directory `api/survset/datagen`.
+Credits to the great suammry work:
+```
+@article{drysdale2022,
+  title={{SurvSet}: An open-source time-to-event dataset repository},
+  author={Drysdale, Erik},
+  journal={arXiv preprint arXiv:2203.03094},
+  year={2022}
+}
+```
